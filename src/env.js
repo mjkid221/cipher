@@ -1,0 +1,34 @@
+import { createEnv } from "@t3-oss/env-nextjs";
+import { z } from "zod";
+
+export const env = createEnv({
+  server: {
+    NODE_ENV: z.enum(["development", "test", "production"]),
+
+    /**
+     * Upstash Redis. Optional — without it the app falls back to an in-process
+     * cache, which is fine locally but re-scrapes on every serverless cold start.
+     */
+    UPSTASH_REDIS_REST_URL: z.string().url().optional(),
+    UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
+
+    /**
+     * Artemis API key. Optional — without it the chain universe, identity and
+     * branding still come from Artemis, but daily-active-address and transaction
+     * columns report as unavailable rather than being guessed.
+     */
+    ARTEMIS_API_KEY: z.string().min(1).optional(),
+  },
+
+  client: {},
+
+  runtimeEnv: {
+    NODE_ENV: process.env.NODE_ENV,
+    UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
+    UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
+    ARTEMIS_API_KEY: process.env.ARTEMIS_API_KEY,
+  },
+
+  skipValidation: !!process.env.SKIP_ENV_VALIDATION,
+  emptyStringAsUndefined: true,
+});

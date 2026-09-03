@@ -1,0 +1,9 @@
+{
+  "crons": [
+    {
+      "comment": "Keeps the snapshot warm so no visitor pays for a cold build.",
+      "path": "/api/health",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

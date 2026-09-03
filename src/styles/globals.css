@@ -1,0 +1,185 @@
+@import "tailwindcss";
+
+/* ===========================================================================
+   Design tokens
+   ---------------------------------------------------------------------------
+   The data-encoding colours below are not a matter of taste. The categorical
+   trio and the diverging pair were run through a colour-vision validator
+   against this app's exact dark surface (#101114) and clear every gate:
+   lightness band, chroma floor, adjacent-pair CVD separation (worst ΔE 9.4),
+   normal-vision separation (worst ΔE 20.9) and 3:1 contrast.
+
+   Do not substitute a chain's brand colour into a data mark. Brand colours are
+   used for identity only — the avatar ring and the logo — where they carry no
+   quantitative meaning.
+   ========================================================================= */
+
+@theme {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", monospace;
+
+  /* -- surfaces ---------------------------------------------------------- */
+  --color-canvas: #0b0c0e;
+  --color-surface: #101114;
+  --color-raised: #16181c;
+  --color-overlay: #1b1e23;
+
+  /* -- ink --------------------------------------------------------------- */
+  --color-ink: #ffffff;
+  --color-ink-secondary: #c3c2b7;
+  --color-ink-muted: #898781;
+  --color-ink-faint: #5c5b57;
+
+  /* -- chrome ------------------------------------------------------------ */
+  --color-hairline: #22242a;
+  --color-grid: #1e2026;
+  --color-axis: #383835;
+
+  /* -- categorical (validated trio, all-pairs safe on --color-surface) --- */
+  --color-series-1: #3987e5;
+  --color-series-2: #d95926;
+  --color-series-3: #199e70;
+
+  /* -- diverging: undervalued <-> overvalued, neutral gray midpoint ------ */
+  --color-under: #3987e5;
+  --color-over: #e66767;
+  --color-mid: #383835;
+
+  /* -- sequential blue ramp (magnitude) ---------------------------------- */
+  --color-seq-100: #cde2fb;
+  --color-seq-250: #86b6ef;
+  --color-seq-400: #3987e5;
+  --color-seq-550: #1c5cab;
+  --color-seq-600: #184f95;
+
+  /* -- status (reserved; always shipped with an icon or label) ----------- */
+  --color-good: #0ca30c;
+  --color-warning: #fab219;
+  --color-serious: #ec835a;
+  --color-critical: #d03b3b;
+
+  --radius-card: 14px;
+}
+
+/* ===========================================================================
+   Base
+   ========================================================================= */
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  border-color: var(--color-hairline);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01";
+  font-variant-numeric: normal;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+/* A single soft light source, high and slightly left, so the page reads as one
+   lit surface rather than a stack of unrelated cards. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      120ch 70ch at 18% -12%,
+      color-mix(in oklab, var(--color-series-1) 13%, transparent),
+      transparent 62%
+    ),
+    radial-gradient(
+      90ch 60ch at 92% 4%,
+      color-mix(in oklab, var(--color-series-3) 7%, transparent),
+      transparent 60%
+    );
+}
+
+/* Fine grain, to stop the large dark fields from banding. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.028;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ===========================================================================
+   Utilities
+   ========================================================================= */
+
+@utility tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Hairline card. One shade off the surface, never a heavy border. */
+@utility panel {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-card);
+}
+
+@utility hide-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-series-1) 40%, transparent);
+  color: #fff;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-series-1);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Custom scrollbar on scroll containers, kept recessive. */
+.scroll-slim {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-hairline) transparent;
+}
+.scroll-slim::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.scroll-slim::-webkit-scrollbar-thumb {
+  background: var(--color-hairline);
+  border-radius: 99px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+.scroll-slim::-webkit-scrollbar-thumb:hover {
+  background: #2f323a;
+  background-clip: content-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
