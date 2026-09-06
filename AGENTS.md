@@ -102,8 +102,9 @@ src/stores/              zustand filters store (persisted; version-bump + migrat
 
 ## Verification
 
-Every change is verified in a real browser before it is reported: run the
-dev server on 3001, drive it with Playwright (MCP `browser_run_code_unsafe`),
+Every change is verified in a real browser before it is reported, at desktop
+width and at a phone width (390×844, `isMobile`): run the dev server on 3001,
+drive it with Playwright (MCP `browser_run_code_unsafe`),
 measure rather than eyeball (bounding boxes for overlaps and alignment, DOM
 counts, console errors must be zero), take a capture and look at it. Probe API
 payloads with curl against `/api/trpc/<router>.<proc>`. Then `pnpm build`,

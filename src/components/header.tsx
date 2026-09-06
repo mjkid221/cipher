@@ -35,8 +35,10 @@ export function PageHeader({
 }) {
   const condensed = useCondensed();
 
+  // The frosted material is 72% canvas; on a phone dense text scrolls right
+  // under it and showed through, so small screens get a near-opaque bar.
   return (
-    <header className="material sticky top-0 z-40">
+    <header className="material sticky top-0 z-40 max-sm:bg-[color-mix(in_oklab,var(--color-canvas)_94%,transparent)]">
       <div
         className={cn(
           "mx-auto flex max-w-[1560px] flex-nowrap items-center gap-x-3 px-4 sm:flex-wrap sm:gap-x-5 sm:gap-y-3 sm:px-6",
