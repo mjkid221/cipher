@@ -2,7 +2,7 @@ import { Screen } from "~/components/screen";
 import { api, HydrateClient } from "~/trpc/server";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export default async function Home() {
   // Awaited, not streamed. Letting the prefetch resolve after the shell renders
@@ -18,6 +18,9 @@ export default async function Home() {
       direction: "desc",
     }),
     api.chains.methodology.prefetch(),
+    // The indicator rail. Its sources carry a four-second deadline, so a cold
+    // one degrades a tile rather than delaying the page.
+    api.market.brief.prefetch(),
   ]);
 
   return (

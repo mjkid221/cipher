@@ -1,12 +1,17 @@
 import { chainsRouter } from "~/server/api/routers/chains";
+import { marketRouter } from "~/server/api/routers/market";
 import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
 
 /**
- * Primary router. Every procedure reads from the cached chain snapshot built in
- * `~/server/domain/aggregate`.
+ * Primary router.
+ *
+ * `chains` reads the cached chain snapshot built in `~/server/domain/aggregate`.
+ * `market` is market-wide context — Fear & Greed, the rainbow, funding — and is
+ * kept apart because it must never feed the chain ranking.
  */
 export const appRouter = createTRPCRouter({
   chains: chainsRouter,
+  market: marketRouter,
 });
 
 export type AppRouter = typeof appRouter;
