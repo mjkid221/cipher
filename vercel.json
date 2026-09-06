@@ -1,7 +1,7 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
-      "comment": "Daily is the most a Hobby plan allows (anything more frequent fails the deploy). It guarantees one warm rebuild a day even with no traffic; the caches' stale windows carry the rest.",
       "path": "/api/health",
       "schedule": "0 6 * * *"
     }
