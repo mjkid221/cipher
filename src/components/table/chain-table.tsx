@@ -276,7 +276,7 @@ export function ChainTable({
         label: "Confidence",
         term: "confidence",
         align: "right",
-        width: 104,
+        width: 120,
         value: (chain) => chain.scores.confidence,
         render: (chain) => (
           <span
@@ -384,7 +384,7 @@ export function ChainTable({
                   }
                   style={{ width: column.width, minWidth: column.width }}
                   className={cn(
-                    "px-3 py-2.5 text-[11px] font-medium tracking-wide whitespace-nowrap uppercase",
+                    "px-3 py-2.5 text-[11px] font-medium tracking-wide whitespace-nowrap uppercase last:pr-6",
                     column.align === "right" ? "text-right" : "text-left",
                   )}
                 >
@@ -481,7 +481,7 @@ export function ChainTable({
                 <td
                   key={column.key}
                   className={cn(
-                    "px-3 py-2.5 align-middle",
+                    "px-3 py-2.5 align-middle last:pr-6",
                     column.align === "right" ? "text-right" : "text-left",
                   )}
                 >
