@@ -1,13 +1,15 @@
 import { z } from "zod";
 
-import { invalidateAll } from "~/server/cache/cached";
-import { getSnapshot } from "~/server/domain/aggregate";
+import { getNews, getSnapshot } from "~/server/domain/aggregate";
 import {
   CHEAPNESS_WEIGHTS,
   COMPOSITE_WEIGHTS,
   FUNDAMENTAL_WEIGHTS,
   median,
+  MIN_MULTIPLES_FOR_CHEAPNESS,
   MOMENTUM_WEIGHTS,
+  SCALE_WEIGHTS,
+  SIZE_FLOOR,
 } from "~/server/domain/score";
 import type { ChainMultiples } from "~/server/domain/types";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
@@ -96,6 +98,7 @@ export const chainsRouter = createTRPCRouter({
         "mcapToRevenue",
         "mcapToStablecoins",
         "mcapToDexVolume",
+        "mcapToRwa",
       ];
 
       return {
@@ -112,12 +115,35 @@ export const chainsRouter = createTRPCRouter({
         peers: chains.map((entry) => ({
           slug: entry.slug,
           name: entry.name,
+          logoUrl: entry.logoUrl,
           marketCap: entry.metrics.marketCap,
           fundamentalIndex: entry.scores.fundamentalIndex,
           mispricing: entry.scores.mispricing,
           confidence: entry.scores.confidence,
           trendResidual: entry.trendResidual,
+          impliedMarketCap: entry.impliedMarketCap,
         })),
+      };
+    }),
+
+  /**
+   * Headlines, on their own request.
+   *
+   * Not part of the snapshot: they were 81% of its payload, carried by every
+   * page view for a window most visitors never open. Optionally narrowed to one
+   * chain for its detail page.
+   */
+  news: publicProcedure
+    .input(z.object({ chain: z.string().min(1).optional() }).optional())
+    .query(async ({ input }) => {
+      const feed = await getNews();
+      if (!input?.chain) return feed;
+
+      const chain = input.chain;
+      return {
+        ...feed,
+        headlines: feed.headlines.filter((item) => item.chains.includes(chain)),
+        coverage: feed.coverage.filter((entry) => entry.chain === chain),
       };
     }),
 
@@ -130,17 +156,13 @@ export const chainsRouter = createTRPCRouter({
     momentum: MOMENTUM_WEIGHTS,
     cheapness: CHEAPNESS_WEIGHTS,
     composite: COMPOSITE_WEIGHTS,
+    /**
+     * The regression axis. Published because it drives the peer trend line, the
+     * implied market cap and every distance-from-trend figure on screen — and a
+     * panel that claims it cannot drift from the model should not omit it.
+     */
+    scale: SCALE_WEIGHTS,
+    minMultiplesForCheapness: MIN_MULTIPLES_FOR_CHEAPNESS,
+    sizeFloor: SIZE_FLOOR,
   })),
-
-  /**
-   * Re-pull every upstream and rebuild. Wired to the header refresh control.
-   * This is the expensive path on purpose — it clears the source caches as well
-   * as the snapshot, so the result reflects new data rather than a recomputation
-   * of the old data.
-   */
-  refresh: publicProcedure.mutation(async () => {
-    await invalidateAll();
-    const { meta } = await getSnapshot();
-    return { generatedAt: meta.generatedAt, sources: meta.sources };
-  }),
 });

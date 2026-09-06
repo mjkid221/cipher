@@ -34,33 +34,35 @@ import type {
 
 /** Level metrics: how big is the chain's real economy. */
 export const FUNDAMENTAL_WEIGHTS = {
-  fees30d: 0.22,
-  tvl: 0.18,
-  stablecoins: 0.15,
-  revenue30d: 0.13,
+  fees30d: 0.2,
+  /** Settled money on the chain. The clearest sign anyone is actually there. */
+  stablecoins: 0.18,
+  tvl: 0.17,
+  revenue30d: 0.12,
   dexVolume30d: 0.12,
-  dau: 0.12,
-  protocols: 0.08,
+  rwaValue: 0.11,
+  bridgeVolume30d: 0.06,
+  protocols: 0.04,
 } as const;
 
 /** Rate-of-change metrics: is that economy growing or decaying. */
 export const MOMENTUM_WEIGHTS = {
-  feesChange30d: 0.32,
-  tvlChange30d: 0.26,
-  dexVolumeChange30d: 0.22,
-  dauChange30d: 0.1,
-  /** Lowest weight of the five: it is an estimate, over a ~2h sample, for the
-   *  dozen chains Mayan actually routes to. */
-  bridgeNetUsd: 0.1,
+  feesChange30d: 0.27,
+  stablecoinsChange30d: 0.22,
+  tvlChange30d: 0.2,
+  dexVolumeChange30d: 0.16,
+  bridgeVolumeChange30d: 0.09,
+  rwaChange30d: 0.06,
 } as const;
 
 /** Valuation ratios. Each is inverted before scoring, so high means cheap. */
 export const CHEAPNESS_WEIGHTS = {
-  mcapToFees: 0.3,
-  mcapToTvl: 0.25,
-  mcapToRevenue: 0.2,
-  mcapToStablecoins: 0.15,
+  mcapToFees: 0.28,
+  mcapToTvl: 0.23,
+  mcapToRevenue: 0.18,
+  mcapToStablecoins: 0.14,
   mcapToDexVolume: 0.1,
+  mcapToRwa: 0.07,
 } as const;
 
 /** How the three views combine into the headline score. */
@@ -81,7 +83,10 @@ export const COMPOSITE_WEIGHTS = {
 export const MIN_MULTIPLES_FOR_CHEAPNESS = 2;
 
 /** A chain below both of these floors is scored but flagged low-confidence. */
-export const SIZE_FLOOR = { tvlUsd: 5_000_000, annualFeesUsd: 1_000_000 } as const;
+export const SIZE_FLOOR = {
+  tvlUsd: 5_000_000,
+  annualFeesUsd: 1_000_000,
+} as const;
 
 const MONTHS_PER_YEAR = 365 / 30;
 
@@ -96,8 +101,9 @@ export function percentileRanks(
 ): (number | null)[] {
   const present = values
     .map((value, index) => ({ value, index }))
-    .filter((entry): entry is { value: number; index: number } =>
-      entry.value !== null && Number.isFinite(entry.value),
+    .filter(
+      (entry): entry is { value: number; index: number } =>
+        entry.value !== null && Number.isFinite(entry.value),
     );
 
   const out = values.map(() => null as number | null);
@@ -113,7 +119,8 @@ export function percentileRanks(
   let i = 0;
   while (i < sorted.length) {
     let j = i;
-    while (j + 1 < sorted.length && sorted[j + 1]!.value === sorted[i]!.value) j++;
+    while (j + 1 < sorted.length && sorted[j + 1]!.value === sorted[i]!.value)
+      j++;
     // 1-based average rank across the tie group.
     const averageRank = (i + j) / 2 + 1;
     const percentile = ((averageRank - 1) / (n - 1)) * 100;
@@ -163,12 +170,14 @@ export interface LinearFit {
  * size index that the peer regression is fitted against.
  */
 export const SCALE_WEIGHTS = {
-  fees30d: 0.3,
-  tvl: 0.22,
-  stablecoins: 0.2,
-  dexVolume30d: 0.15,
-  protocols: 0.08,
-  dau: 0.05,
+  fees30d: 0.27,
+  tvl: 0.2,
+  stablecoins: 0.19,
+  dexVolume30d: 0.12,
+  revenue30d: 0.08,
+  rwaValue: 0.08,
+  bridgeVolume30d: 0.03,
+  protocols: 0.03,
 } as const;
 
 /** Ordinary least squares on (x, y). Used for peer-implied valuation. */
@@ -210,16 +219,21 @@ export function linearFit(
  * functional form — both sides of the relationship are log-normal, so the fit
  * belongs in log space on both axes.
  */
-function standardisedLogs(values: readonly (number | null)[]): (number | null)[] {
+function standardisedLogs(
+  values: readonly (number | null)[],
+): (number | null)[] {
   const logs = values.map((value) =>
-    value !== null && Number.isFinite(value) && value > 0 ? Math.log(value) : null,
+    value !== null && Number.isFinite(value) && value > 0
+      ? Math.log(value)
+      : null,
   );
   const present = logs.filter((value): value is number => value !== null);
   if (present.length < 2) return values.map(() => null);
 
   const mean = present.reduce((sum, value) => sum + value, 0) / present.length;
   const variance =
-    present.reduce((sum, value) => sum + (value - mean) ** 2, 0) / present.length;
+    present.reduce((sum, value) => sum + (value - mean) ** 2, 0) /
+    present.length;
   const sd = Math.sqrt(variance);
   if (sd === 0) return values.map(() => null);
 
@@ -253,6 +267,7 @@ export function computeMultiples(metrics: ChainMetrics): ChainMultiples {
     mcapToRevenue: ratio(annual(metrics.revenue30d), 25_000),
     mcapToStablecoins: ratio(metrics.stablecoins, 100_000),
     mcapToDexVolume: ratio(annual(metrics.dexVolume30d), 1_000_000),
+    mcapToRwa: ratio(metrics.rwaValue, 1_000_000),
   };
 }
 
@@ -301,7 +316,20 @@ const LEVEL_KEYS = Object.keys(FUNDAMENTAL_WEIGHTS) as LevelKey[];
 const MOMENTUM_KEYS = Object.keys(MOMENTUM_WEIGHTS) as MomentumKey[];
 const MULTIPLE_KEYS = Object.keys(CHEAPNESS_WEIGHTS) as MultipleKey[];
 
-/** Every field that feeds the model, used to measure per-chain coverage. */
+/**
+ * Fields whose absence is genuinely a *data gap*, used to measure per-chain
+ * coverage.
+ *
+ * `rwaValue` and `bridgeVolume30d` are deliberately absent. Both are derived
+ * from complete global scans, so a chain missing from either result has a real
+ * zero rather than missing data, and docking its confidence would punish it for
+ * a fact about the world.
+ *
+ * Mayan's routing counts are absent for the same structural reason: that source
+ * reaches about a dozen chains, and every other chain in the universe used to
+ * lose a tenth of its coverage — roughly 0.055 of confidence — for a metric it
+ * could never have had.
+ */
 const COVERAGE_KEYS = [
   "marketCap",
   "tvl",
@@ -310,9 +338,7 @@ const COVERAGE_KEYS = [
   "revenue30d",
   "dexVolume30d",
   "protocols",
-  "dau",
   "tvlChange30d",
-  "bridgeNetUsd",
 ] as const satisfies readonly (keyof ChainMetrics)[];
 
 export function scoreUniverse(rows: readonly ScoreInput[]): UniverseScores {
@@ -338,7 +364,9 @@ export function scoreUniverse(rows: readonly ScoreInput[]): UniverseScores {
   const cheapnessPercentiles = {} as Record<MultipleKey, (number | null)[]>;
   for (const key of MULTIPLE_KEYS) {
     const ranked = percentileRanks(rows.map((row) => row.multiples[key]));
-    cheapnessPercentiles[key] = ranked.map((p) => (p === null ? null : 100 - p));
+    cheapnessPercentiles[key] = ranked.map((p) =>
+      p === null ? null : 100 - p,
+    );
   }
 
   const marketCapPercentiles = percentileRanks(
@@ -349,7 +377,9 @@ export function scoreUniverse(rows: readonly ScoreInput[]): UniverseScores {
 
   const scaleLogs = {} as Record<ScaleKey, (number | null)[]>;
   for (const key of SCALE_KEYS) {
-    scaleLogs[key] = standardisedLogs(rows.map((row) => row.metrics[key] ?? null));
+    scaleLogs[key] = standardisedLogs(
+      rows.map((row) => row.metrics[key] ?? null),
+    );
   }
 
   const rawScaleIndex = rows.map((_, index) =>
@@ -387,6 +417,7 @@ export function scoreUniverse(rows: readonly ScoreInput[]): UniverseScores {
     fundamentalIndex: number | null;
     momentum: number | null;
     cheapness: number | null;
+    cheapnessUnavailable: boolean;
     marketCapPercentile: number | null;
     rankGap: number | null;
     mispricing: number | null;
@@ -415,15 +446,16 @@ export function scoreUniverse(rows: readonly ScoreInput[]): UniverseScores {
       (key) => cheapnessPercentiles[key][index] != null,
     ).length;
 
-    const cheapness =
-      presentMultiples >= MIN_MULTIPLES_FOR_CHEAPNESS
-        ? weightedMean(
-            MULTIPLE_KEYS.map((key) => ({
-              value: cheapnessPercentiles[key][index] ?? null,
-              weight: CHEAPNESS_WEIGHTS[key],
-            })),
-          )
-        : null;
+    const cheapnessUnavailable = presentMultiples < MIN_MULTIPLES_FOR_CHEAPNESS;
+
+    const cheapness = cheapnessUnavailable
+      ? null
+      : weightedMean(
+          MULTIPLE_KEYS.map((key) => ({
+            value: cheapnessPercentiles[key][index] ?? null,
+            weight: CHEAPNESS_WEIGHTS[key],
+          })),
+        );
 
     const marketCapPercentile = marketCapPercentiles[index] ?? null;
     const investable = row.metrics.marketCap !== null;
@@ -458,7 +490,8 @@ export function scoreUniverse(rows: readonly ScoreInput[]): UniverseScores {
     const percentiles: Record<string, number | null> = {
       marketCap: marketCapPercentile,
     };
-    for (const key of LEVEL_KEYS) percentiles[key] = levelPercentiles[key][index] ?? null;
+    for (const key of LEVEL_KEYS)
+      percentiles[key] = levelPercentiles[key][index] ?? null;
     for (const key of MOMENTUM_KEYS)
       percentiles[key] = momentumPercentiles[key][index] ?? null;
     for (const key of MULTIPLE_KEYS)
@@ -469,6 +502,7 @@ export function scoreUniverse(rows: readonly ScoreInput[]): UniverseScores {
       fundamental,
       fundamentalIndex: fundamentalIndex[index] ?? null,
       momentum,
+      cheapnessUnavailable,
       cheapness,
       marketCapPercentile,
       rankGap,
@@ -568,6 +602,7 @@ export function scoreUniverse(rows: readonly ScoreInput[]): UniverseScores {
         mispricing: draft.mispricing,
         confidence: draft.confidence,
         coverage: draft.coverage,
+        cheapnessUnavailable: draft.cheapnessUnavailable,
       },
       percentiles: draft.percentiles,
       tier: classify(draft.mispricing, draft.confidence, draft.investable),

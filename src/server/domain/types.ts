@@ -8,6 +8,11 @@ export interface ChainIdentity {
   logoUrl: string | null;
   /** Official brand colour, used for identity marks only — never for encoding. */
   brandColor: string | null;
+  /**
+   * Layer, where CoinGecko classifies it. Null for the many chains that are
+   * genuinely neither — appchains, sidechains, validiums.
+   */
+  layer: "L1" | "L2" | null;
   description: string | null;
   founded: string | null;
   founders: string | null;
@@ -27,15 +32,40 @@ export interface ChainMetrics {
   /** Circulating market capitalisation, USD. */
   marketCap: number | null;
   price: number | null;
-  priceChange7d: number | null;
   priceChange30d: number | null;
+
+  /**
+   * Market attention. Shown, never scored.
+   *
+   * `fdv` matters beyond the panel: every valuation ratio in this app divides
+   * *circulating* market cap, which flatters a chain with a large unlock ahead.
+   * `dilutionOverhang` is FDV ÷ market cap, so 4.3 means four times the float is
+   * still to come.
+   */
+  fdv: number | null;
+  dilutionOverhang: number | null;
+  tradingVolume24h: number | null;
+  fromAllTimeHigh: number | null;
 
   tvl: number | null;
   tvlChange7d: number | null;
   tvlChange30d: number | null;
 
   stablecoins: number | null;
+  /** Percent change in stablecoin float over 30 days. */
+  stablecoinsChange30d: number | null;
   protocols: number | null;
+
+  /**
+   * Tokenised real-world assets held on the chain, in USD. Treasuries, private
+   * credit, tokenised equities and the like.
+   *
+   * Absence means zero, not unknown: this is derived from a scan of every
+   * protocol DefiLlama tracks, so a chain missing from the result genuinely has
+   * no RWA rather than missing data.
+   */
+  rwaValue: number | null;
+  rwaChange30d: number | null;
 
   fees30d: number | null;
   feesChange30d: number | null;
@@ -44,16 +74,29 @@ export interface ChainMetrics {
   dexVolume30d: number | null;
   dexVolumeChange30d: number | null;
 
-  /** Mean daily active addresses, 30d. Null unless an Artemis key is set. */
-  dau: number | null;
-  dauChange30d: number | null;
-  txns: number | null;
+  /** Cross-chain volume routed through bridge aggregators over 30 days, USD. */
+  bridgeVolume30d: number | null;
+  bridgeVolumeChange30d: number | null;
 
-  /** Estimated net 24h cross-chain flow via Mayan, USD. */
-  bridgeNetUsd: number | null;
-  bridgeInboundTransfers: number | null;
-  bridgeOutboundTransfers: number | null;
-  bridgeTraders: number | null;
+  /**
+   * Cross-chain capital flow over the trailing 30 days, in USD, from Artemis.
+   * Covers 35 chains — the broadest flow source available — but still under
+   * half the universe, so it is shown rather than scored.
+   */
+  netFlowInUsd: number | null;
+  netFlowOutUsd: number | null;
+  netFlowUsd: number | null;
+
+  /**
+   * Cross-chain routing through Mayan over the trailing 30 days, in USD. Narrower
+   * than the Artemis figures above, but the only source that names the specific
+   * routes. Feeds no score.
+   */
+  routingInflowUsd: number | null;
+  routingOutflowUsd: number | null;
+  routingNetUsd: number | null;
+  /** Share of all volume Mayan routed in the window, 0–1. */
+  routingShare: number | null;
 }
 
 /** Valuation ratios. Lower means cheaper on every one of these. */
@@ -68,6 +111,8 @@ export interface ChainMultiples {
   mcapToStablecoins: number | null;
   /** Market cap ÷ annualised DEX volume. */
   mcapToDexVolume: number | null;
+  /** Market cap ÷ real-world assets held on the chain. */
+  mcapToRwa: number | null;
 }
 
 export interface ChainScores {
@@ -93,14 +138,27 @@ export interface ChainScores {
   confidence: number;
   /** Share of model inputs present, 0–1. */
   coverage: number;
+  /**
+   * True when the chain had too few valuation ratios to score cheapness, so the
+   * value gap came from fundamentals and momentum alone. Surfaced rather than
+   * left silent, because the weights silently renormalise.
+   */
+  cheapnessUnavailable: boolean;
 }
 
+/**
+ * `no-token` is a chain with no native asset — nothing to price, so no value
+ * gap, but its fundamentals and momentum are real and ranked. `unrated` is a
+ * chain that has a token but returned no market cap this run: a data gap, not
+ * a verdict.
+ */
 export type ValuationTier =
   | "deep-value"
   | "undervalued"
   | "fair"
   | "rich"
   | "overvalued"
+  | "no-token"
   | "unrated";
 
 export interface ChainSnapshot extends ChainIdentity {
@@ -136,7 +194,7 @@ export interface AggregateMeta {
   generatedAt: string;
   /** Per-source health so the UI can be honest about gaps. */
   sources: {
-    id: "defillama" | "artemis" | "mayan";
+    id: "defillama" | "artemis" | "mayan" | "coingecko";
     label: string;
     url: string;
     status: "ok" | "degraded" | "unavailable";
@@ -154,9 +212,64 @@ export interface AggregateMeta {
     volume24h: number | null;
     swaps24h: number | null;
     activeTraders24h: number | null;
-    sampleSize: number;
-    sampleWindowHours: number | null;
+    /** Window the flow figures cover. */
+    window: string;
+    /** Total volume routed in that window, USD. */
+    totalVolumeUsd: number;
+    /** Busiest routes in the window, heaviest first. */
+    corridors: { from: string; to: string; volumeUsd: number }[];
+    /** Every chain with volume in the window, busiest first. */
+    byChain: {
+      chain: string;
+      inflowUsd: number;
+      outflowUsd: number;
+      netUsd: number;
+      share: number;
+    }[];
+    /** Chains Mayan supports that saw no volume in the window. */
+    idleChains: string[];
   } | null;
+  /**
+   * Cross-chain flow. One dataset, not a menu.
+   *
+   * It draws on two kinds of source because they answer different questions and
+   * neither can answer both. Per-chain totals come from Artemis, which
+   * aggregates every bridge it tracks and reaches the most chains. Routes come
+   * from Wormhole and deBridge, the two protocols that publish complete
+   * chain-to-chain matrices.
+   *
+   * The two figures do not reconcile, and that is expected rather than an
+   * error: the totals cover every bridge while the routes cover two of them. The
+   * interface says which is which instead of pretending they are the same
+   * number.
+   */
+  flows: {
+    windowDays: number;
+    /** The sources the totals are combined from, each dollar counted once. */
+    sources: string[];
+    /** Every chain with flow, largest net inflow first. */
+    byChain: {
+      chain: string;
+      inflowUsd: number;
+      outflowUsd: number;
+      netUsd: number;
+      share: number;
+      slug: string | null;
+      /** False when no traceable route touches this chain. */
+      hasRoutes: boolean;
+      /** What each source contributed to this chain, after overlap removal. */
+      parts: { source: string; inflowUsd: number; outflowUsd: number }[];
+    }[];
+    /** Directed routes, heaviest first. */
+    corridors: { from: string; to: string; volumeUsd: number }[];
+    /** Total moved across all bridges in the window. */
+    totalVolumeUsd: number;
+    /** Total across the traceable routes. Necessarily smaller. */
+    routeVolumeUsd: number;
+    /** Protocols the routes come from. */
+    routeSources: string[];
+  } | null;
+
   universeSize: number;
   ratedCount: number;
   cache: {
@@ -165,6 +278,30 @@ export interface AggregateMeta {
     stale: boolean;
     tier: string;
   };
+}
+
+/**
+ * Headlines, fetched separately from the snapshot.
+ *
+ * They used to ride inside `AggregateMeta` and were 81% of its payload — 206 KB
+ * that every page load carried for a window most visitors never open. Split out,
+ * they cost nothing until asked for, which is also why there is no longer a cap
+ * on how many are kept.
+ */
+export interface NewsFeed {
+  headlines: {
+    id: string;
+    title: string;
+    url: string;
+    source: string;
+    /** The outlet's domain; the client derives its mark from it. */
+    sourceDomain: string | null;
+    publishedAt: string | null;
+    chains: string[];
+  }[];
+  /** How much each chain was written about in the window. */
+  coverage: { chain: string; found: number; shown: number }[];
+  windowDays: number;
 }
 
 export interface AggregateResult {
