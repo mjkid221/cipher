@@ -4,18 +4,18 @@ import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 
+import { WindowsProvider } from "~/components/window/window-context";
 import { TRPCReactProvider } from "~/trpc/react";
 
 export const metadata: Metadata = {
   title: {
-    default: "Chainbase — find the undervalued chain",
-    template: "%s — Chainbase",
+    default: "Caliper — what a chain earns against what it costs",
+    template: "%s — Caliper",
   },
   description:
-    "Ranks every major blockchain by how cheap it trades relative to the fees, capital and users it actually has. Built on DefiLlama, Artemis and Mayan.",
-  icons: [{ rel: "icon", url: "/favicon.ico" }],
+    "Caliper measures the gap between what each major chain earns and what it costs, and ranks them by it. Built on DefiLlama, Artemis and Mayan.",
   openGraph: {
-    title: "Chainbase — find the undervalued chain",
+    title: "Caliper — what a chain earns against what it costs",
     description:
       "A valuation screen for blockchains: fundamentals versus what the market pays.",
     type: "website",
@@ -38,7 +38,9 @@ export default function RootLayout({
     >
       <body className="min-h-dvh antialiased">
         <TRPCReactProvider>
-          <div className="relative z-10">{children}</div>
+          <WindowsProvider>
+            <div className="relative z-10">{children}</div>
+          </WindowsProvider>
         </TRPCReactProvider>
       </body>
     </html>
