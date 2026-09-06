@@ -46,3 +46,7 @@ yarn-error.log*
 .idea
 # Playwright MCP scratch output
 .playwright-mcp/
+
+# screenshots from browser verification runs belong in the scratchpad, not the repo
+/v-*.png
+/screen-*.png
