@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useState } from "react";
 
@@ -505,15 +504,4 @@ function Legend({ regression }: { regression: AlphaRegression | null }) {
       </div>
     </div>
   );
-}
-
-/** Wraps a mark so the whole point is a link on the detail page. */
-export function AlphaMapLink({
-  slug,
-  children,
-}: {
-  slug: string;
-  children: React.ReactNode;
-}) {
-  return <Link href={`/chain/${slug}`}>{children}</Link>;
 }

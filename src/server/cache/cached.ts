@@ -198,7 +198,7 @@ export async function cachedValue<T>(
   return (await cached(key, options, loader)).data;
 }
 
-/** Drop a single key from both tiers. */
+/** Drop a single key from both tiers. Kept for operators; unused in the app. @public */
 export async function invalidate(key: string) {
   l1.delete(key);
   const redis = getRedis();
@@ -218,6 +218,7 @@ export async function invalidate(key: string) {
  * which is not what someone pressing "Refresh" is asking for. This clears the
  * source caches too, so the next read genuinely re-pulls upstream.
  */
+/** Drop every key under the prefix. Kept for operators; unused in the app. @public */
 export async function invalidateAll() {
   l1.clear();
 

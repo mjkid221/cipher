@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { ChevronDown } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 import { cn } from "~/lib/cn";
 import { formatPercent } from "~/lib/format";
@@ -149,44 +149,6 @@ export function Delta({
 
 /* ------------------------------------------------------------ stat tiles ---- */
 
-export function StatTile({
-  label,
-  value,
-  hint,
-  accent,
-  children,
-  className,
-}: {
-  label: React.ReactNode;
-  value: React.ReactNode;
-  hint?: React.ReactNode;
-  accent?: string;
-  children?: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={cn("panel relative overflow-hidden p-4", className)}>
-      {accent && (
-        <span
-          className="absolute inset-x-0 top-0 h-px"
-          style={{
-            background: `linear-gradient(90deg, transparent, ${accent}, transparent)`,
-          }}
-          aria-hidden
-        />
-      )}
-      <div className="text-ink-muted text-[11px] font-medium tracking-wide uppercase">
-        {label}
-      </div>
-      <div className="mt-2 text-[26px] leading-none font-semibold tracking-tight">
-        {value}
-      </div>
-      {hint && <div className="text-ink-muted mt-2 text-[12px]">{hint}</div>}
-      {children}
-    </div>
-  );
-}
-
 /* ----------------------------------------------------------------- panel ---- */
 
 export function Panel({
@@ -285,48 +247,3 @@ export function CollapsiblePanel({
 }
 
 /* ------------------------------------------------------------- count-up ----- */
-
-/**
- * Eases a number toward its target on first paint. Reduced-motion users get the
- * final value immediately.
- */
-export function CountUp({
-  value,
-  format,
-  className,
-}: {
-  value: number;
-  format: (value: number) => string;
-  className?: string;
-}) {
-  const [display, setDisplay] = useState(value);
-  const frame = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (
-      typeof window === "undefined" ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      setDisplay(value);
-      return;
-    }
-
-    const from = 0;
-    const start = performance.now();
-    const duration = 700;
-
-    const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / duration);
-      const eased = 1 - (1 - t) ** 3;
-      setDisplay(from + (value - from) * eased);
-      if (t < 1) frame.current = requestAnimationFrame(tick);
-    };
-
-    frame.current = requestAnimationFrame(tick);
-    return () => {
-      if (frame.current) cancelAnimationFrame(frame.current);
-    };
-  }, [value]);
-
-  return <span className={className}>{format(display)}</span>;
-}

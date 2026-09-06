@@ -53,9 +53,10 @@ export function Explain({
 
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [position, setPosition] = useState<{ top: number; left: number } | null>(
-    null,
-  );
+  const [position, setPosition] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
 
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -249,25 +250,5 @@ export function Explain({
           document.body,
         )}
     </>
-  );
-}
-
-/** A label with its definition attached. Keeps the pairing consistent. */
-export function LabelWithExplain({
-  children,
-  term,
-  side,
-  className,
-}: {
-  children: React.ReactNode;
-  term: GlossaryTerm;
-  side?: "top" | "bottom";
-  className?: string;
-}) {
-  return (
-    <span className={cn("inline-flex items-center gap-1.5", className)}>
-      {children}
-      <Explain term={term} side={side} />
-    </span>
   );
 }

@@ -25,9 +25,8 @@ const getQueryClient = () => {
 export const api = createTRPCReact<AppRouter>();
 
 /**
- * Inference helper for inputs.
- *
- * @example type HelloInput = RouterInputs['example']['hello']
+ * Inference helper for inputs. Part of the standard tRPC scaffold; kept for
+ * consumers even while nothing in the app uses it. @public
  */
 export type RouterInputs = inferRouterInputs<AppRouter>;
 
@@ -59,7 +58,7 @@ export function TRPCReactProvider(props: { children: React.ReactNode }) {
           },
         }),
       ],
-    })
+    }),
   );
 
   return (
