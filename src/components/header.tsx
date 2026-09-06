@@ -53,10 +53,10 @@ export function PageHeader({
         <Link
           href="/"
           className="group flex items-center gap-2.5 rounded-full"
-          aria-label="Caliper — home"
+          aria-label="Cipher — home"
         >
           <Mark />
-          <span className="text-display text-[16px] leading-none">Caliper</span>
+          <span className="text-display text-[16px] leading-none">Cipher</span>
           <span
             className={cn(
               "text-ink-faint hidden overflow-hidden text-[12px] whitespace-nowrap transition-all lg:inline-block",
@@ -169,7 +169,7 @@ function Mark() {
       }}
       aria-hidden
     >
-      {/* One caliper jaw, also a C, closing on the chain. As icon.svg, without the vernier, which is noise at this size. */}
+      {/* The C of Cipher, closing on a single point. As icon.svg, without the ticks. */}
       <svg viewBox="0 0 64 64" className="size-[86%]">
         <defs>
           <linearGradient

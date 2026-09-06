@@ -1,4 +1,4 @@
-# Caliper
+# Cipher
 
 A valuation screen for blockchains. It answers one question:
 
