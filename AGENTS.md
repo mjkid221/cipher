@@ -12,7 +12,12 @@ README explains the product and the model to humans.
 |---|---|
 | Dev server (always port 3001; 3000 is taken on this machine) | `pnpm dev` |
 | Type check / lint / production build | `pnpm typecheck`, `pnpm lint`, `pnpm build` |
-| Format | `npx prettier --write <files>` |
+| Format (write / check) | `pnpm format:write`, `pnpm format:check` |
+| Dead code, unused deps and exports | `pnpm knip` (config in `knip.json`; mark intentional exports `@public`) |
+
+CI (`.github/workflows/ci.yml`) runs `format:check`, `typecheck`, `lint` and
+`knip` on every push to `main` and every pull request; run the same four
+locally before committing. Deploys are Vercel's Git integration, not CI.
 
 Gotchas: `pnpm build` writes to `.next` while `next dev` serves from it, so
 never build while a browser check is running, and restart the dev server after
