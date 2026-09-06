@@ -79,31 +79,219 @@ export function fetchStablecoinsByChain() {
   );
 }
 
-/* ------------------------------------------------------- protocol counts ---- */
+/* ------------------------------------------------------ stablecoin growth ---- */
 
 /**
- * Number of tracked DeFi protocols deployed on each chain — a rough proxy for
- * ecosystem breadth. Derived from a ~7 MB payload, so only the small aggregate
- * is ever cached.
+ * Percent change in a chain's stablecoin float over 30 days.
+ *
+ * Stablecoin supply is the least gameable measure of whether anyone is actually
+ * using a chain: it is money someone chose to settle there rather than
+ * incentivised deposits chasing a yield. The direction of travel matters as much
+ * as the level, so it feeds momentum as well as fundamentals.
+ *
+ * The history endpoint returns a chain's entire series with no date filter, so
+ * only the tail is used. Values move slowly, hence the long cache.
  */
-export function fetchProtocolCountsByChain() {
+function fetchStablecoinGrowth(chain: string) {
   return cachedValue(
-    "llama:protocolcounts",
-    { ttlSeconds: 3600, staleSeconds: 21600 },
-    async () => {
-      const raw = await fetchJson<{
-        protocols?: { chains?: string[]; tvl?: number | null }[];
-      }>(`${LLAMA}/lite/protocols2`, { timeoutMs: 45_000 });
+    `llama:stablegrowth:${chain}`,
+    { ttlSeconds: 3600, staleSeconds: 21_600 },
+    async (): Promise<number | null> => {
+      try {
+        const raw = await fetchJson<
+          { totalCirculatingUSD?: Record<string, number> }[] | null
+        >(`${STABLES}/stablecoincharts/${encodeURIComponent(chain)}`, {
+          retries: 1,
+          timeoutMs: 30_000,
+          nullOn: [400, 404],
+        });
 
-      const counts: Record<string, number> = {};
-      for (const protocol of raw.protocols ?? []) {
-        for (const chain of protocol.chains ?? []) {
-          counts[chain] = (counts[chain] ?? 0) + 1;
-        }
+        if (!Array.isArray(raw) || raw.length < 32) return null;
+
+        const total = (index: number) =>
+          Object.values(raw[index]?.totalCirculatingUSD ?? {}).reduce(
+            (sum, value) => sum + (Number.isFinite(value) ? value : 0),
+            0,
+          );
+
+        const now = total(raw.length - 1);
+        const before = total(raw.length - 31);
+        if (!before || before <= 0) return null;
+        return (now / before - 1) * 100;
+      } catch {
+        return null;
       }
-      return counts;
     },
   );
+}
+
+export async function fetchStablecoinGrowthForChains(
+  chains: readonly string[],
+) {
+  const results = await mapLimit(chains, 8, async (chain) => {
+    try {
+      return [chain, await fetchStablecoinGrowth(chain)] as const;
+    } catch {
+      return [chain, null] as const;
+    }
+  });
+  return Object.fromEntries(results) as Record<string, number | null>;
+}
+
+/* --------------------------------------------- ecosystem scan (one pass) ---- */
+
+/**
+ * `lite/protocols2` is a ~7 MB payload listing every protocol DefiLlama tracks,
+ * with a per-chain TVL breakdown on each. It answers two questions at once, so
+ * it is fetched once and projected into two small aggregates. Only the
+ * projections are cached — the raw payload never goes near Redis.
+ */
+export interface EcosystemScan {
+  /** Protocols deployed per chain. A rough proxy for ecosystem breadth. */
+  protocolCounts: Record<string, number>;
+  /** Real-world-asset value per chain, in USD. */
+  rwaValue: Record<string, number>;
+  /** Percent change in that RWA value versus a month ago. */
+  rwaChange30d: Record<string, number>;
+}
+
+/** DefiLlama's own categories for tokenised real-world assets. */
+const RWA_CATEGORIES = new Set(["RWA", "RWA Lending"]);
+
+/**
+ * `chainTvls` mixes real chain names with derived accounting buckets. Of the 134
+ * distinct keys across RWA protocols, 59 are buckets: everything hyphenated
+ * (`Ethereum-borrowed`, `Base-doublecounted`) plus these bare lowercase keys.
+ * Summing them would double count and invent chains that do not exist.
+ */
+const NON_CHAIN_TVL_KEYS = new Set([
+  "borrowed",
+  "staking",
+  "pool2",
+  "vesting",
+  "doublecounted",
+  "excludeParent",
+  "offers",
+  "treasury",
+]);
+
+const isRealChainKey = (key: string) =>
+  !key.includes("-") && !NON_CHAIN_TVL_KEYS.has(key);
+
+interface RawProtocol {
+  chains?: string[];
+  category?: string;
+  chainTvls?: Record<
+    string,
+    { tvl?: number | null; tvlPrevMonth?: number | null } | number | null
+  >;
+}
+
+export function fetchEcosystemScan() {
+  return cachedValue(
+    "llama:ecosystem",
+    { ttlSeconds: 3600, staleSeconds: 21_600 },
+    async (): Promise<EcosystemScan> => {
+      const raw = await fetchJson<{ protocols?: RawProtocol[] }>(
+        `${LLAMA}/lite/protocols2`,
+        { timeoutMs: 45_000 },
+      );
+
+      const protocolCounts: Record<string, number> = {};
+      const rwaNow: Record<string, number> = {};
+      const rwaPrev: Record<string, number> = {};
+
+      for (const protocol of raw.protocols ?? []) {
+        for (const chain of protocol.chains ?? []) {
+          protocolCounts[chain] = (protocolCounts[chain] ?? 0) + 1;
+        }
+
+        if (!RWA_CATEGORIES.has(protocol.category ?? "")) continue;
+
+        for (const [chain, entry] of Object.entries(protocol.chainTvls ?? {})) {
+          if (!isRealChainKey(chain)) continue;
+          if (!entry || typeof entry !== "object") continue;
+
+          const current = numberOrNull(entry.tvl);
+          const previous = numberOrNull(entry.tvlPrevMonth);
+          if (current !== null) rwaNow[chain] = (rwaNow[chain] ?? 0) + current;
+          if (previous !== null) {
+            rwaPrev[chain] = (rwaPrev[chain] ?? 0) + previous;
+          }
+        }
+      }
+
+      const rwaChange30d: Record<string, number> = {};
+      for (const [chain, current] of Object.entries(rwaNow)) {
+        const previous = rwaPrev[chain];
+        if (previous && previous > 0) {
+          rwaChange30d[chain] = (current / previous - 1) * 100;
+        }
+      }
+
+      return { protocolCounts, rwaValue: rwaNow, rwaChange30d };
+    },
+  );
+}
+
+/* ---------------------------------------------------- bridge aggregators ---- */
+
+export interface BridgeVolume {
+  total30d: number | null;
+  total24h: number | null;
+  change30d: number | null;
+}
+
+/**
+ * Cross-chain volume routed through bridge aggregators.
+ *
+ * DefiLlama's dedicated bridges API (the one behind defillama.com/bridges/chains)
+ * now returns 402 on every path, so per-chain deposit and withdrawal flow is not
+ * available for free. This endpoint is, and it measures a closely related thing:
+ * user-initiated cross-chain transfers routed through the 27 aggregator
+ * front-ends DefiLlama tracks — LI.FI, Jumper, Socket, Rango and others.
+ *
+ * Mayan is deliberately not among those 27, so the two sources can be used
+ * together without double counting.
+ */
+function fetchBridgeVolume(chain: string) {
+  return cachedValue(
+    `llama:bridgevolume:${chain}`,
+    { ttlSeconds: 600, staleSeconds: 3600 },
+    async (): Promise<BridgeVolume | null> => {
+      const params = new URLSearchParams({
+        excludeTotalDataChart: "true",
+        excludeTotalDataChartBreakdown: "true",
+      });
+
+      try {
+        const raw = await fetchJson<OverviewProtocol | null>(
+          `${LLAMA}/overview/bridge-aggregators/${encodeURIComponent(chain)}?${params}`,
+          { retries: 1, timeoutMs: 20_000, nullOn: [400, 404] },
+        );
+        if (!raw) return null;
+        return {
+          total30d: numberOrNull(raw.total30d),
+          total24h: numberOrNull(raw.total24h),
+          change30d: numberOrNull(raw.change_30dover30d),
+        };
+      } catch {
+        // No aggregator routes to this chain. That is a real zero, not an outage.
+        return null;
+      }
+    },
+  );
+}
+
+export async function fetchBridgeVolumeForChains(chains: readonly string[]) {
+  const results = await mapLimit(chains, 6, async (chain) => {
+    try {
+      return [chain, await fetchBridgeVolume(chain)] as const;
+    } catch {
+      return [chain, null] as const;
+    }
+  });
+  return Object.fromEntries(results) as Record<string, BridgeVolume | null>;
 }
 
 /* -------------------------------------------------------------- markets ---- */
@@ -111,13 +299,13 @@ export function fetchProtocolCountsByChain() {
 export interface MarketQuote {
   mcap: number | null;
   price: number | null;
-  price7dAgo: number | null;
   price30dAgo: number | null;
 }
 
 const chunk = <T>(items: readonly T[], size: number): T[][] => {
   const out: T[][] = [];
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  for (let i = 0; i < items.length; i += size)
+    out.push(items.slice(i, i + size));
   return out;
 };
 
@@ -135,31 +323,29 @@ export function fetchMarketQuotes(geckoIds: readonly string[]) {
       const now = Math.floor(Date.now() / 1000);
       const batches = chunk(ids, 40);
 
-      const [mcapBatches, spotBatches, weekBatches, monthBatches] =
-        await Promise.all([
-          mapLimit(batches, 4, (batch) =>
-            fetchJson<Record<string, { mcap?: number }>>(`${COINS}/mcaps`, {
-              method: "POST",
-              body: { coins: batch.map((id) => `coingecko:${id}`) },
-              timeoutMs: 25_000,
-            }).catch(() => ({})),
-          ),
-          mapLimit(batches, 4, (batch) => fetchPriceBatch(batch)),
-          mapLimit(batches, 4, (batch) =>
-            fetchPriceBatch(batch, now - 7 * 86_400),
-          ),
-          mapLimit(batches, 4, (batch) =>
-            fetchPriceBatch(batch, now - 30 * 86_400),
-          ),
-        ]);
+      const [mcapBatches, spotBatches, monthBatches] = await Promise.all([
+        mapLimit(batches, 4, (batch) =>
+          fetchJson<Record<string, { mcap?: number }>>(`${COINS}/mcaps`, {
+            method: "POST",
+            body: { coins: batch.map((id) => `coingecko:${id}`) },
+            timeoutMs: 25_000,
+          }).catch(() => ({})),
+        ),
+        mapLimit(batches, 4, (batch) => fetchPriceBatch(batch)),
+        mapLimit(batches, 4, (batch) =>
+          fetchPriceBatch(batch, now - 30 * 86_400),
+        ),
+      ]);
 
       const mcaps = Object.assign({}, ...mcapBatches) as Record<
         string,
         { mcap?: number }
       >;
       const spot = Object.assign({}, ...spotBatches) as Record<string, number>;
-      const week = Object.assign({}, ...weekBatches) as Record<string, number>;
-      const month = Object.assign({}, ...monthBatches) as Record<string, number>;
+      const month = Object.assign({}, ...monthBatches) as Record<
+        string,
+        number
+      >;
 
       const out: Record<string, MarketQuote> = {};
       for (const id of ids) {
@@ -170,7 +356,6 @@ export function fetchMarketQuotes(geckoIds: readonly string[]) {
           // the chain straight to the top of a "cheapest" ranking.
           mcap: positiveOrNull(mcaps[`coingecko:${id}`]?.mcap),
           price: numberOrNull(spot[id]),
-          price7dAgo: numberOrNull(week[id]),
           price30dAgo: numberOrNull(month[id]),
         };
       }
@@ -250,8 +435,10 @@ async function fetchChainCategoryTotals(
     { timeoutMs: 45_000 },
   );
 
-  const out: Record<string, { total30d: number | null; change: number | null }> =
-    {};
+  const out: Record<
+    string,
+    { total30d: number | null; change: number | null }
+  > = {};
 
   for (const entry of raw.protocols ?? []) {
     if (entry.category !== "Chain") continue;

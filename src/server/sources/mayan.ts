@@ -1,81 +1,76 @@
 import "server-only";
 
 import { cachedValue } from "~/server/cache/cached";
-import { fetchJson, mapLimit } from "~/server/lib/http";
+import { fetchJson } from "~/server/lib/http";
 
 /**
- * Mayan adapter — cross-chain routing demand.
+ * Mayan adapter — where capital is actually routing between chains.
  *
- * Mayan is a cross-chain swap protocol; https://explorer.mayan.finance shows
- * where value is actually moving between chains right now. That makes it the one
- * genuinely *forward-looking* input in the model: bridge inflow tends to lead
- * TVL, which in turn leads price.
+ * Mayan publishes an aggregate corridor matrix at `/v3/stats/chains-overview`:
+ * for every chain, the USD volume flowing in from and out to every other chain,
+ * over a 24h, 7d or 30d window. It is the same data the public explorer renders,
+ * and it is authoritative.
  *
- * A deliberate accuracy note. The per-swap `fromTokenPrice` field in the public
- * feed is unreliable — sampling it shows the destination asset's price attached
- * to the source leg (SOL quoted at $1, USDC quoted at $2,391), which inflates a
- * naive `amount × price` sum by more than an order of magnitude against Mayan's
- * own reported 24h total. So we never trust per-swap USD.
+ * An earlier version of this adapter did not use it. It sampled a few thousand
+ * recent swaps and counted *transfers* per chain, on the reasoning that the
+ * per-swap `fromTokenPrice` field is unreliable — which it is, often carrying the
+ * destination asset's price on the source leg. Avoiding those prices was right;
+ * concluding that dollars were therefore unavailable was not.
  *
- * What we do instead:
- *   • transfer *counts* per chain, which are reliable, give each chain's share
- *     of routing activity;
- *   • the protocol-level 24h volume from `/stats/overview`, which is reliable,
- *     is then allocated across chains by that share.
+ * The cost of that mistake was large. Transfer counts assume every swap is
+ * roughly the same size, and on Mayan they are not: Monad carried about 0.7% of
+ * transfers but nearly 12% of volume, because the swaps routing through it are
+ * far larger than average. Counting them made a major destination look like a
+ * rounding error.
  *
- * The result is an estimate, and it is labelled as one everywhere it surfaces.
+ * This version reads the aggregate directly. One request replaces forty, the
+ * window is thirty days rather than five hours, and the figures are real dollars.
  */
 
-const MAYAN = "https://explorer-api.mayan.finance/v3";
+const EXPLORER = "https://explorer-api.mayan.finance/v3";
+const PRICE_API = "https://price-api.mayan.finance/v3";
 
-/** Page size accepted by the explorer API (101+ is rejected). */
-const PAGE_SIZE = 100;
-/** Pages to sample. 12 × 100 keeps the request budget small but the share stable. */
-const PAGES = 12;
-
-/* --------------------------------------------------------- chain mapping ---- */
+/** Windows the endpoint accepts. Anything else silently returns all-time. */
+export type MayanWindow = "24h" | "7d" | "30d";
 
 /**
- * Wormhole chain ids as they appear in the Mayan feed.
+ * Thirty days, to match the Artemis flow window.
  *
- * The mapping below was verified against the live feed by reading the gas-token
- * symbol of native (zero-address) transfers per id, which is why 47 is HyperEVM
- * and 48 is Monad rather than the other way round. Ids we cannot attribute are
- * folded into an "unmapped" bucket rather than guessed.
+ * These two sources sit behind a toggle in the same panel. Running them over
+ * different periods meant switching source changed two variables at once — the
+ * bridges counted *and* the timespan — which made the two views impossible to
+ * compare.
  */
-export const WORMHOLE_CHAINS: Record<string, string> = {
-  "1": "Solana",
-  "2": "Ethereum",
-  "4": "BSC",
-  "5": "Polygon",
-  "6": "Avalanche",
-  "10": "Fantom",
-  "14": "Celo",
-  "15": "Near",
-  "16": "Moonbeam",
-  "19": "Injective",
-  "21": "Sui",
-  "22": "Aptos",
-  "23": "Arbitrum",
-  "24": "OP Mainnet",
-  "25": "Gnosis",
-  "29": "Bitcoin",
-  "30": "Base",
-  "32": "Sei",
-  "33": "Rootstock",
-  "34": "Scroll",
-  "35": "Mantle",
-  "36": "Blast",
-  "37": "X Layer",
-  "38": "Linea",
-  "39": "Berachain",
-  "43": "Unichain",
-  "44": "World Chain",
-  "45": "Ink",
-  "47": "HyperEVM",
-  "48": "Monad",
-  "50": "Plume Mainnet",
-  "52": "Sonic",
+const WINDOW: MayanWindow = "30d";
+
+/** Separator for corridor keys. A space cannot appear in a DefiLlama slug pair. */
+const KEY_SEP = "->";
+
+/**
+ * Mayan chain slug to DefiLlama chain name.
+ *
+ * A genuine naming join, not a guess: Mayan says `optimism`, DefiLlama says
+ * `OP Mainnet`. Mayan's two Hyperliquid environments both settle onto the single
+ * chain DefiLlama tracks, so their volumes are summed.
+ */
+const MAYAN_TO_LLAMA: Record<string, string> = {
+  solana: "Solana",
+  ethereum: "Ethereum",
+  bsc: "BSC",
+  polygon: "Polygon",
+  avalanche: "Avalanche",
+  arbitrum: "Arbitrum",
+  optimism: "OP Mainnet",
+  base: "Base",
+  sui: "Sui",
+  aptos: "Aptos",
+  linea: "Linea",
+  unichain: "Unichain",
+  monad: "Monad",
+  sonic: "Sonic",
+  fogo: "Fogo",
+  hyperevm: "Hyperliquid L1",
+  hypercore: "Hyperliquid L1",
 };
 
 /* ------------------------------------------------------------- overview ---- */
@@ -84,8 +79,8 @@ export interface MayanOverview {
   volume24h: number | null;
   swaps24h: number | null;
   activeTraders24h: number | null;
+  /** Lifetime volume; the yardstick that shows whether a window was honoured. */
   volumeAllTime: number | null;
-  swapsAllTime: number | null;
 }
 
 export function fetchMayanOverview() {
@@ -95,170 +90,203 @@ export function fetchMayanOverview() {
     async (): Promise<MayanOverview> => {
       const raw = await fetchJson<{
         last24h?: { volume?: number; swaps?: number; activeTraders?: number };
-        allTime?: { volume?: number; swaps?: number };
-      }>(`${MAYAN}/stats/overview`);
+        allTime?: { volume?: number };
+      }>(`${EXPLORER}/stats/overview`);
 
       return {
         volume24h: numberOrNull(raw.last24h?.volume),
         swaps24h: numberOrNull(raw.last24h?.swaps),
         activeTraders24h: numberOrNull(raw.last24h?.activeTraders),
         volumeAllTime: numberOrNull(raw.allTime?.volume),
-        swapsAllTime: numberOrNull(raw.allTime?.swaps),
       };
     },
   );
 }
 
-/* ------------------------------------------------------------ per chain ---- */
+/* ------------------------------------------------------ supported chains ---- */
+
+/**
+ * Mayan's token registry, whose top-level keys are the chains it supports. Used
+ * to name chains that are supported but saw no volume in the window, which the
+ * flow data alone cannot distinguish from chains that do not exist.
+ */
+function fetchSupportedChains() {
+  return cachedValue(
+    "mayan:supported",
+    { ttlSeconds: 21_600, staleSeconds: 86_400 },
+    async (): Promise<string[]> => {
+      const raw = await fetchJson<Record<string, unknown>>(
+        `${PRICE_API}/tokens`,
+        { timeoutMs: 45_000 },
+      );
+      return Object.keys(raw).sort();
+    },
+  );
+}
+
+/* ----------------------------------------------------------- flow matrix ---- */
 
 export interface MayanChainFlow {
   /** DefiLlama-style chain name, so it joins straight onto the registry. */
   chain: string;
-  inboundTransfers: number;
-  outboundTransfers: number;
-  /** Inbound minus outbound, in transfers. */
-  netTransfers: number;
-  /** Share of all sampled transfer legs, 0–1. */
-  activityShare: number;
-  /** Distinct trader addresses seen touching this chain in the sample. */
-  traders: number;
-  /** 24h inbound volume, estimated by allocating the protocol total by share. */
-  estimatedInboundUsd: number | null;
-  estimatedOutboundUsd: number | null;
-  /** Estimated net 24h USD flow. Positive means capital arriving. */
-  estimatedNetUsd: number | null;
+  inflowUsd: number;
+  outflowUsd: number;
+  /** Inflow minus outflow. Positive means capital arriving. */
+  netUsd: number;
+  /** Share of all routed volume in the window, 0–1. */
+  share: number;
+}
+
+/** One directed route, source chain to destination chain. */
+export interface MayanCorridor {
+  from: string;
+  to: string;
+  volumeUsd: number;
 }
 
 export interface MayanFlows {
   chains: Record<string, MayanChainFlow>;
+  /** Busiest routes in the window, heaviest first. */
+  corridors: MayanCorridor[];
   overview: MayanOverview;
-  /** How many swaps the shares were computed from. */
-  sampleSize: number;
-  /** Wall-clock span of the sample, in hours. */
-  sampleWindowHours: number | null;
-  /** Transfer legs whose chain id we could not attribute. */
-  unmappedLegs: number;
+  /** The window these flows cover. */
+  window: MayanWindow;
+  /** Total volume routed in the window, USD. */
+  totalVolumeUsd: number;
+  /** Supported chains, as DefiLlama names. */
+  supportedChains: string[];
+  /** Supported chains with no volume in the window. */
+  idleChains: string[];
+  /** Mayan slugs with volume that this app has no DefiLlama name for. */
+  unmappedChains: string[];
 }
 
-interface RawSwap {
-  trader?: string;
-  sourceChain?: string;
-  destChain?: string;
-  clientStatus?: string;
-  initiatedAt?: string;
+interface FlowEntry {
+  chain?: string;
+  volume?: number;
 }
+
+type ChainsOverview = Record<
+  string,
+  { inFlow?: FlowEntry[]; outFlow?: FlowEntry[] } | undefined
+>;
 
 export function fetchMayanFlows() {
   return cachedValue(
-    "mayan:flows",
-    { ttlSeconds: 300, staleSeconds: 1800 },
+    `mayan:flows:${WINDOW}`,
+    { ttlSeconds: 900, staleSeconds: 3600 },
     async (): Promise<MayanFlows> => {
-      const offsets = Array.from({ length: PAGES }, (_, i) => i * PAGE_SIZE);
-
-      const [pages, overview] = await Promise.all([
-        mapLimit(offsets, 4, async (offset) => {
-          try {
-            const raw = await fetchJson<{ data?: RawSwap[] }>(
-              `${MAYAN}/swaps?limit=${PAGE_SIZE}&offset=${offset}`,
-              { timeoutMs: 25_000, retries: 1 },
-            );
-            return raw.data ?? [];
-          } catch {
-            return [];
-          }
-        }),
+      const [raw, overview, supported] = await Promise.all([
+        fetchJson<ChainsOverview>(
+          `${EXPLORER}/stats/chains-overview?timeRange=${WINDOW}`,
+          { timeoutMs: 30_000 },
+        ),
         fetchMayanOverview(),
+        fetchSupportedChains().catch((): string[] => []),
       ]);
 
-      const swaps = pages
-        .flat()
-        // Refunded swaps never moved value; in-progress ones did initiate.
-        .filter((swap) => swap.clientStatus !== "REFUNDED");
+      const unmapped = new Set<string>();
 
-      const inbound = new Map<string, number>();
-      const outbound = new Map<string, number>();
-      const traders = new Map<string, Set<string>>();
-      let legs = 0;
-      let unmappedLegs = 0;
-      let minTime = Number.POSITIVE_INFINITY;
-      let maxTime = Number.NEGATIVE_INFINITY;
+      /** Mayan slug to DefiLlama name, remembering what could not be translated. */
+      const toLlama = (slug: string | undefined): string | undefined => {
+        if (!slug) return undefined;
+        const name = MAYAN_TO_LLAMA[slug];
+        if (!name) unmapped.add(slug);
+        return name;
+      };
 
-      const bump = (map: Map<string, number>, key: string) =>
-        map.set(key, (map.get(key) ?? 0) + 1);
+      const inflow = new Map<string, number>();
+      const outflow = new Map<string, number>();
+      const corridorVolume = new Map<string, number>();
 
-      for (const swap of swaps) {
-        const time = swap.initiatedAt ? Date.parse(swap.initiatedAt) : NaN;
-        if (Number.isFinite(time)) {
-          minTime = Math.min(minTime, time);
-          maxTime = Math.max(maxTime, time);
+      const add = (map: Map<string, number>, key: string, value: number) =>
+        map.set(key, (map.get(key) ?? 0) + value);
+
+      for (const [slug, sides] of Object.entries(raw)) {
+        const chain = toLlama(slug);
+        if (!chain || !sides) continue;
+
+        for (const entry of sides.outFlow ?? []) {
+          const counterparty = toLlama(entry.chain);
+          const volume = numberOrNull(entry.volume);
+          if (!counterparty || volume === null || volume <= 0) continue;
+
+          add(outflow, chain, volume);
+          // A self-loop is an internal rebalance rather than a route between
+          // chains, and it appears on both sides of the matrix.
+          if (counterparty !== chain) {
+            add(corridorVolume, `${chain}${KEY_SEP}${counterparty}`, volume);
+          }
         }
 
-        for (const [side, map] of [
-          [swap.sourceChain, outbound],
-          [swap.destChain, inbound],
-        ] as const) {
-          if (!side) continue;
-          legs++;
-          const chain = WORMHOLE_CHAINS[side];
-          if (!chain) {
-            unmappedLegs++;
-            continue;
-          }
-          bump(map, chain);
-          if (swap.trader) {
-            const set = traders.get(chain) ?? new Set<string>();
-            set.add(swap.trader);
-            traders.set(chain, set);
-          }
+        for (const entry of sides.inFlow ?? []) {
+          const counterparty = toLlama(entry.chain);
+          const volume = numberOrNull(entry.volume);
+          if (!counterparty || volume === null || volume <= 0) continue;
+          add(inflow, chain, volume);
         }
       }
 
-      const total24h = overview.volume24h;
+      // Every route is reported by both of its endpoints, so the network total
+      // is one side of the matrix, not the sum of both.
+      const totalVolumeUsd = [...inflow.values()].reduce(
+        (sum, value) => sum + value,
+        0,
+      );
+
+      // The endpoint answers with lifetime figures for any window it does not
+      // recognise, silently. A month cannot be most of all time, so if it is,
+      // the parameter was ignored and the stale value is the honest answer.
+      if (
+        overview.volumeAllTime !== null &&
+        overview.volumeAllTime > 0 &&
+        totalVolumeUsd > 0.5 * overview.volumeAllTime
+      ) {
+        throw new Error(
+          `mayan: chains-overview ignored timeRange=${WINDOW} and returned lifetime volume`,
+        );
+      }
+
       const chains: Record<string, MayanChainFlow> = {};
-      const names = new Set([...inbound.keys(), ...outbound.keys()]);
-
-      for (const chain of names) {
-        const inboundTransfers = inbound.get(chain) ?? 0;
-        const outboundTransfers = outbound.get(chain) ?? 0;
-        const share = legs > 0 ? (inboundTransfers + outboundTransfers) / legs : 0;
-
-        // Each swap contributes one inbound and one outbound leg, so the volume
-        // to spread across legs is 2× the protocol total.
-        const perLegUsd =
-          total24h !== null && legs > 0 ? (total24h * 2) / legs : null;
-
-        const estimatedInboundUsd =
-          perLegUsd === null ? null : perLegUsd * inboundTransfers;
-        const estimatedOutboundUsd =
-          perLegUsd === null ? null : perLegUsd * outboundTransfers;
-
+      for (const chain of new Set([...inflow.keys(), ...outflow.keys()])) {
+        const inflowUsd = inflow.get(chain) ?? 0;
+        const outflowUsd = outflow.get(chain) ?? 0;
         chains[chain] = {
           chain,
-          inboundTransfers,
-          outboundTransfers,
-          netTransfers: inboundTransfers - outboundTransfers,
-          activityShare: share,
-          traders: traders.get(chain)?.size ?? 0,
-          estimatedInboundUsd,
-          estimatedOutboundUsd,
-          estimatedNetUsd:
-            estimatedInboundUsd === null || estimatedOutboundUsd === null
-              ? null
-              : estimatedInboundUsd - estimatedOutboundUsd,
+          inflowUsd,
+          outflowUsd,
+          netUsd: inflowUsd - outflowUsd,
+          share:
+            totalVolumeUsd > 0
+              ? (inflowUsd + outflowUsd) / (totalVolumeUsd * 2)
+              : 0,
         };
       }
 
-      const sampleWindowHours =
-        Number.isFinite(minTime) && Number.isFinite(maxTime) && maxTime > minTime
-          ? (maxTime - minTime) / 3_600_000
-          : null;
+      const corridors: MayanCorridor[] = [...corridorVolume.entries()]
+        .map(([key, volumeUsd]) => {
+          const [from = "", to = ""] = key.split(KEY_SEP);
+          return { from, to, volumeUsd };
+        })
+        .sort((a, b) => b.volumeUsd - a.volumeUsd);
+
+      const supportedChains = [
+        ...new Set(
+          supported
+            .map((slug) => MAYAN_TO_LLAMA[slug])
+            .filter((name): name is string => Boolean(name)),
+        ),
+      ].sort();
 
       return {
         chains,
+        corridors,
         overview,
-        sampleSize: swaps.length,
-        sampleWindowHours,
-        unmappedLegs,
+        window: WINDOW,
+        totalVolumeUsd,
+        supportedChains,
+        idleChains: supportedChains.filter((name) => !(name in chains)),
+        unmappedChains: [...unmapped].sort(),
       };
     },
   );

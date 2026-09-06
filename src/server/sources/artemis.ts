@@ -14,11 +14,13 @@ import { fetchJson } from "~/server/lib/http";
  *     universe and to join DefiLlama to Artemis without a hand-written alias
  *     table.
  *
- *   • The time-series metrics (daily active addresses, transactions) sit behind
- *     an API key. The public web app signs its own short-lived token in the
- *     browser; we do not forge that. Set `ARTEMIS_API_KEY` and the usage columns
- *     light up. Leave it unset and the model simply scores without them — see
- *     `coverage` on each chain snapshot.
+ *   • The cross-chain flow data behind /sectors/flows is open too, and is the
+ *     broadest flow source available at 35 chains.
+ *
+ * Artemis needs no API key for any of this. It did once, for daily active
+ * addresses and transaction counts — the only endpoints here that are gated —
+ * but those are vanity metrics that say more about airdrop farming than about a
+ * chain's economics, so they were dropped from the model and the key with them.
  */
 
 const DATA_SVC = "https://data-svc.artemisxyz.com";
@@ -40,8 +42,6 @@ export interface ArtemisChain {
   twitter: string | null;
   github: string | null;
   explorer: string | null;
-  /** Metric names Artemis tracks for this chain. */
-  trackedMetrics: string[];
 }
 
 interface RawAsset {
@@ -67,7 +67,6 @@ interface RawAsset {
       block_explorer?: string | null;
     } | null;
   } | null;
-  metrics_metadata_overwrite?: { metric_name?: string }[] | null;
 }
 
 const clean = (value: string | null | undefined): string | null => {
@@ -84,9 +83,12 @@ export function fetchArtemisChains() {
     "artemis:chains",
     { ttlSeconds: 21_600, staleSeconds: 86_400 },
     async (): Promise<ArtemisChain[]> => {
-      const raw = await fetchJson<{ assets?: RawAsset[] }>(`${DATA_SVC}/asset/`, {
-        timeoutMs: 45_000,
-      });
+      const raw = await fetchJson<{ assets?: RawAsset[] }>(
+        `${DATA_SVC}/asset/`,
+        {
+          timeoutMs: 45_000,
+        },
+      );
 
       const chains: ArtemisChain[] = [];
 
@@ -111,9 +113,6 @@ export function fetchArtemisChains() {
           twitter: clean(asset.metadata?.links?.twitter),
           github: clean(asset.metadata?.links?.github),
           explorer: clean(asset.metadata?.links?.block_explorer),
-          trackedMetrics: (asset.metrics_metadata_overwrite ?? [])
-            .map((entry) => entry?.metric_name)
-            .filter((name): name is string => Boolean(name)),
         });
       }
 
@@ -128,157 +127,243 @@ function normaliseHex(value: string | null | undefined): string | null {
   return /^#[0-9a-f]{6}$/i.test(hex) ? hex.toLowerCase() : null;
 }
 
-/* -------------------------------------------------------- usage metrics ---- */
+/* -------------------------------------------------------- capital flows ---- */
 
-export interface ArtemisActivity {
-  /** Mean daily active addresses over the trailing window. */
-  dau: number | null;
-  /** Mean daily active addresses over the 30 days before that. */
-  dauPrev: number | null;
-  /** Mean daily transactions over the trailing window. */
-  txns: number | null;
-  txnsPrev: number | null;
+/**
+ * Cross-chain capital flow, from the data behind
+ * https://www.artemis.ai/sectors/flows.
+ *
+ * This one is open, unlike the per-chain usage metrics above, and it is the
+ * broadest flow source available: 35 chains with real inflow, outflow and net
+ * figures in USD, against the 13 Mayan reaches. Mayan still answers a question
+ * Artemis does not — which specific routes carry the volume — so the two are
+ * complementary rather than redundant.
+ *
+ * Passing no `sourceChains` filter returns every chain Artemis tracks. Naming a
+ * subset instead restricts the aggregation to flows *between* those chains,
+ * which quietly understates every one of them, so the filter is deliberately
+ * omitted.
+ */
+export interface ChainFlow {
+  /** Artemis chain id, which is how the rest of the app joins to Artemis. */
+  artemisId: string;
+  inflowUsd: number;
+  outflowUsd: number;
+  netUsd: number;
+  /**
+   * What Artemis attributes to each named bridge (across, debridge, usdt0,
+   * wormhole). These sum to well under the totals — the rest is canonical
+   * bridges and unnamed routes — and they are what lets the combined view add a
+   * bridge's own, fuller figures without counting the attributed part twice.
+   */
+  byBridge: Record<string, { inflowUsd: number; outflowUsd: number }>;
 }
 
-export type ArtemisActivityMap = Record<string, ArtemisActivity>;
+/** One directed route between two chains, in USD. */
+export interface FlowCorridor {
+  from: string;
+  to: string;
+  volumeUsd: number;
+}
 
-const ACTIVITY_METRICS = ["CHAIN_DAU", "CHAIN_TXNS"] as const;
-
-let keyWarningShown = false;
-
-export function hasArtemisKey() {
-  return Boolean(process.env.ARTEMIS_API_KEY);
+export interface ArtemisFlows {
+  chains: ChainFlow[];
+  /**
+   * Routes between chains. Artemis reports each chain's largest counterparties
+   * rather than a complete matrix, so this is the busiest routes rather than
+   * every route — but it spans far more chains than any complete matrix on
+   * offer.
+   */
+  corridors: FlowCorridor[];
+  /** Trailing window these figures cover, in days. */
+  windowDays: number;
 }
 
 /**
- * Daily active addresses and transaction counts, averaged over the trailing
- * 30 days and the prior 30 for a momentum read. Returns `null` when no API key
- * is configured so callers can degrade rather than guess.
+ * Thirty days rather than seven. It roughly doubles how many chains appear in
+ * the route breakdown, and a month of flow is a steadier signal than a week.
  */
-export function fetchArtemisActivity(artemisIds: readonly string[]) {
-  const apiKey = process.env.ARTEMIS_API_KEY;
-  const ids = [...new Set(artemisIds)].sort();
+const FLOW_WINDOW_DAYS = 30;
 
-  if (!apiKey) {
-    if (!keyWarningShown) {
-      keyWarningShown = true;
-      console.info(
-        "[source:artemis] ARTEMIS_API_KEY not set — active-address and " +
-          "transaction columns will be reported as unavailable.",
-      );
-    }
-    return Promise.resolve(null);
-  }
+interface RawFlowRow {
+  value?: string;
+  parent?: string | null;
+  inflow?: number;
+  outflow?: number;
+  netflow?: number;
+}
 
-  if (ids.length === 0) return Promise.resolve<ArtemisActivityMap>({});
-
+export function fetchArtemisFlows() {
   return cachedValue(
-    `artemis:activity:${ids.length}`,
-    { ttlSeconds: 3600, staleSeconds: 21_600 },
-    async (): Promise<ArtemisActivityMap | null> => {
+    "artemis:flows",
+    { ttlSeconds: 1800, staleSeconds: 7200 },
+    async (): Promise<ArtemisFlows> => {
       const end = new Date();
-      const start = new Date(end.getTime() - 61 * 86_400_000);
+      const start = new Date(end.getTime() - FLOW_WINDOW_DAYS * 86_400_000);
       const params = new URLSearchParams({
-        artemisIds: ids.join(","),
         startDate: start.toISOString().slice(0, 10),
         endDate: end.toISOString().slice(0, 10),
-        APIKey: apiKey,
+        granularity: "DAY",
       });
 
-      try {
-        const raw = await fetchJson<unknown>(
-          `${DATA_SVC}/data/api/${ACTIVITY_METRICS.join(",")}/?${params}`,
-          { timeoutMs: 45_000, retries: 1 },
-        );
-        return parseActivity(raw, ids);
-      } catch (error) {
-        console.warn(
-          "[source:artemis] metrics request failed —",
-          error instanceof Error ? error.message : error,
-        );
-        return null;
+      const raw = await fetchJson<RawFlowRow[]>(
+        `${DATA_SVC}/flows/netflows-table/?${params}`,
+        { timeoutMs: 45_000 },
+      );
+
+      const rows = Array.isArray(raw) ? raw : [];
+      const chains: ChainFlow[] = [];
+      const chainIds = new Set<string>();
+
+      for (const row of rows) {
+        // Top-level rows are the chains themselves.
+        if (row.parent !== null && row.parent !== undefined) continue;
+
+        const artemisId = row.value?.trim();
+        // Artemis buckets flows it cannot attribute under `unmapped:<n>`.
+        if (!artemisId || artemisId.startsWith("unmapped")) continue;
+
+        const inflowUsd = numberOr(row.inflow, 0);
+        const outflowUsd = numberOr(row.outflow, 0);
+        if (inflowUsd === 0 && outflowUsd === 0) continue;
+
+        chainIds.add(artemisId);
+        chains.push({
+          artemisId,
+          inflowUsd,
+          outflowUsd,
+          netUsd: numberOr(row.netflow, inflowUsd - outflowUsd),
+          byBridge: {},
+        });
       }
+      const byId = new Map(chains.map((chain) => [chain.artemisId, chain]));
+
+      // Child rows mix two different things: counterparty *chains* and the
+      // *bridges* that carried the value (across, debridge, usdt0, wormhole).
+      // Keeping only children that name a chain turns the tree into a route map.
+      const corridors: FlowCorridor[] = [];
+
+      for (const row of rows) {
+        const parent = row.parent?.trim();
+        const child = row.value?.trim();
+        if (!parent || !child) continue;
+        if (parent === child) continue;
+        if (!chainIds.has(parent)) continue;
+
+        // A child that is not a chain is a bridge: what Artemis attributes to
+        // it, from this chain's point of view.
+        if (!chainIds.has(child)) {
+          if (!child.startsWith("unmapped")) {
+            const owner = byId.get(parent);
+            if (owner) {
+              owner.byBridge[child] = {
+                inflowUsd: numberOr(row.inflow, 0),
+                outflowUsd: numberOr(row.outflow, 0),
+              };
+            }
+          }
+          continue;
+        }
+
+        // A row under `ethereum` named `arbitrum` describes the pair from
+        // Ethereum's point of view: its `outflow` left Ethereum for Arbitrum.
+        const out = numberOr(row.outflow, 0);
+        const inn = numberOr(row.inflow, 0);
+        if (out > 0)
+          corridors.push({ from: parent, to: child, volumeUsd: out });
+        if (inn > 0)
+          corridors.push({ from: child, to: parent, volumeUsd: inn });
+      }
+
+      chains.sort((a, b) => b.netUsd - a.netUsd);
+      corridors.sort((a, b) => b.volumeUsd - a.volumeUsd);
+      return { chains, corridors, windowDays: FLOW_WINDOW_DAYS };
     },
   );
 }
 
-interface SeriesPoint {
-  date: string;
-  val: number;
+function numberOr(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
+
+/* ------------------------------------------------------------- research ---- */
 
 /**
- * Artemis has shipped a few response envelopes over the years
- * (`data.symbols`, `data.artemis_ids`, or a bare map). Rather than pin one, walk
- * the object for `{ date, val }` series and index them by chain and metric.
+ * Artemis' research feed.
+ *
+ * Open, no key, and useful — with two limits that shape how it can be shown.
+ *
+ * It is a mixed feed: only about a quarter of articles are crypto, the rest
+ * being equities research. And `mentioned_tickers` is populated on roughly a
+ * fifth of articles, almost entirely with stock symbols. **Articles cannot be
+ * tied to a chain**, so this is a global feed filtered to the crypto category
+ * rather than a per-chain one, and the interface calls it research rather than
+ * news.
  */
-function parseActivity(
-  raw: unknown,
-  ids: readonly string[],
-): ArtemisActivityMap {
-  const found = new Map<string, SeriesPoint[]>();
-
-  const isSeries = (value: unknown): value is SeriesPoint[] =>
-    Array.isArray(value) &&
-    value.length > 0 &&
-    typeof value[0] === "object" &&
-    value[0] !== null &&
-    "date" in (value[0] as object) &&
-    "val" in (value[0] as object);
-
-  const walk = (node: unknown, trail: string[]) => {
-    if (!node || typeof node !== "object") return;
-    if (isSeries(node)) {
-      found.set(trail.join("/").toLowerCase(), node);
-      return;
-    }
-    if (Array.isArray(node)) return;
-    for (const [key, value] of Object.entries(node)) {
-      walk(value, [...trail, key]);
-    }
-  };
-  walk(raw, []);
-
-  const pick = (id: string, metric: string): SeriesPoint[] | null => {
-    for (const [path, series] of found) {
-      if (path.includes(id.toLowerCase()) && path.includes(metric.toLowerCase())) {
-        return series;
-      }
-    }
-    return null;
-  };
-
-  const out: ArtemisActivityMap = {};
-
-  for (const id of ids) {
-    const dau = pick(id, "dau");
-    const txns = pick(id, "txns") ?? pick(id, "txn");
-    out[id] = {
-      dau: meanOfLast(dau, 0, 30),
-      dauPrev: meanOfLast(dau, 30, 30),
-      txns: meanOfLast(txns, 0, 30),
-      txnsPrev: meanOfLast(txns, 30, 30),
-    };
-  }
-
-  return out;
+export interface ResearchArticle {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  url: string;
+  coverImageUrl: string | null;
+  author: string | null;
+  authorHandle: string | null;
+  authorAvatarUrl: string | null;
+  categories: string[];
+  publishedAt: string | null;
+  views: number | null;
 }
 
-/** Mean of `count` points ending `offset` points back from the newest. */
-function meanOfLast(
-  series: SeriesPoint[] | null,
-  offset: number,
-  count: number,
-): number | null {
-  if (!series || series.length === 0) return null;
+interface RawArticle {
+  id?: string;
+  short_id?: string;
+  title?: string;
+  subtitle?: string | null;
+  cover_image_url?: string | null;
+  author_display_name?: string | null;
+  author_handle?: string | null;
+  author_avatar_url?: string | null;
+  categories?: string[] | null;
+  status?: string;
+  published_at?: string | null;
+  view_count?: number | null;
+}
 
-  const ordered = [...series]
-    .filter((point) => typeof point.val === "number" && Number.isFinite(point.val))
-    .sort((a, b) => a.date.localeCompare(b.date));
+export function fetchArtemisResearch() {
+  return cachedValue(
+    "artemis:research",
+    { ttlSeconds: 1800, staleSeconds: 21_600 },
+    async (): Promise<ResearchArticle[]> => {
+      const raw = await fetchJson<{ data?: RawArticle[] } | RawArticle[]>(
+        `${DATA_SVC}/articles/?limit=50`,
+        { timeoutMs: 45_000 },
+      );
 
-  const end = ordered.length - offset;
-  const window = ordered.slice(Math.max(0, end - count), Math.max(0, end));
-  if (window.length === 0) return null;
+      const rows = Array.isArray(raw) ? raw : (raw.data ?? []);
 
-  return window.reduce((sum, point) => sum + point.val, 0) / window.length;
+      return rows
+        .filter((row) => row.status !== "draft")
+        .filter((row) => (row.categories ?? []).includes("crypto"))
+        .map((row) => ({
+          id: row.id ?? row.short_id ?? "",
+          title: (row.title ?? "").trim(),
+          subtitle: clean(row.subtitle),
+          // Articles are addressed by their short id on the public site.
+          url: row.short_id
+            ? `https://www.artemis.ai/articles/${row.short_id}`
+            : "https://www.artemis.ai/articles",
+          coverImageUrl: clean(row.cover_image_url),
+          author: clean(row.author_display_name),
+          authorHandle: clean(row.author_handle),
+          authorAvatarUrl: clean(row.author_avatar_url),
+          categories: row.categories ?? [],
+          publishedAt: clean(row.published_at),
+          views: typeof row.view_count === "number" ? row.view_count : null,
+        }))
+        .filter((article) => article.id && article.title)
+        .sort((a, b) =>
+          (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""),
+        );
+    },
+  );
 }
