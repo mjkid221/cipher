@@ -1,9 +1,9 @@
 {
   "crons": [
     {
-      "comment": "Keeps the snapshot warm so no visitor pays for a cold build.",
+      "comment": "Daily is the most a Hobby plan allows (anything more frequent fails the deploy). It guarantees one warm rebuild a day even with no traffic; the caches' stale windows carry the rest.",
       "path": "/api/health",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 6 * * *"
     }
   ]
 }

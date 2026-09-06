@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 
 import { getSnapshot } from "~/server/domain/aggregate";
+import { getMarketBrief } from "~/server/domain/market";
+import { settle } from "~/server/lib/http";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 /**
  * Liveness plus a compact view of the model's output, useful for verifying a
@@ -14,7 +16,12 @@ export async function GET(request: Request) {
   const startedAt = Date.now();
 
   try {
-    const { chains, meta } = await getSnapshot();
+    // The market brief rides along so the cron warms both caches. Its own
+    // failure never fails the health check; the snapshot is what `ok` means.
+    const [{ chains, meta }, market] = await Promise.all([
+      getSnapshot(),
+      settle("market", getMarketBrief({ deadlineMs: 40_000 })),
+    ]);
 
     const top = chains
       .filter((chain) => chain.investable && chain.scores.confidence >= 0.5)
@@ -42,8 +49,18 @@ export async function GET(request: Request) {
         withFees: chains.filter((c) => c.metrics.fees30d !== null).length,
         withDexVolume: chains.filter((c) => c.metrics.dexVolume30d !== null).length,
         withStablecoins: chains.filter((c) => c.metrics.stablecoins !== null).length,
-        withBridgeFlow: chains.filter((c) => c.metrics.bridgeNetUsd !== null).length,
-        withActiveAddresses: chains.filter((c) => c.metrics.dau !== null).length,
+        withRwa: chains.filter((c) => (c.metrics.rwaValue ?? 0) > 0).length,
+        withBridgeVolume: chains.filter(
+          (c) => (c.metrics.bridgeVolume30d ?? 0) > 0,
+        ).length,
+        withMayanRouting: chains.filter(
+          (c) => c.metrics.routingNetUsd !== null,
+        ).length,
+        withStablecoinGrowth: chains.filter(
+          (c) => c.metrics.stablecoinsChange30d !== null,
+        ).length,
+        withCapitalFlow: chains.filter((c) => c.metrics.netFlowUsd !== null)
+          .length,
         withArtemisIdentity: chains.filter((c) => c.keys.artemisId !== null).length,
       },
       top,
@@ -74,6 +91,9 @@ export async function GET(request: Request) {
         return acc;
       }, {}),
       valueTraps: chains.filter((c) => c.valueTrapRisk).length,
+      market: market
+        ? { warming: market.warming, sources: market.sources }
+        : null,
     });
   } catch (error) {
     return NextResponse.json(

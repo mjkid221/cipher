@@ -1,5 +1,7 @@
 import "server-only";
 
+import { waitUntil } from "@vercel/functions";
+
 import { getRedis } from "./redis";
 
 /**
@@ -15,9 +17,33 @@ import { getRedis } from "./redis";
  *
  * Concurrent callers for the same key share a single in-flight load, so a cold
  * cache under load produces one upstream request, not one per reader.
+ *
+ * ## Refreshing behind the reader, on serverless
+ *
+ * A stale hit answers immediately and refreshes in the background. On Vercel
+ * the function may be frozen the moment the response is sent, which would kill
+ * that refresh every time and leave the value ageing until it hard-expired —
+ * at which point some visitor pays for a cold rebuild. Every background load
+ * is therefore handed to `waitUntil`, which keeps the invocation alive until
+ * the promise settles. Outside Vercel it is a no-op.
+ *
+ * This matters more than it did: on the Hobby plan the warm-up cron can run
+ * only once a day, so the stale windows and these background refreshes are
+ * what keep the dashboard instant between visits.
  */
 
-export const CACHE_PREFIX = "chainaggr:v1";
+/** Kick a refresh without waiting for it, and keep the platform from killing it. */
+function refreshInBackground(promise: Promise<unknown>) {
+  const settled = promise.catch(() => undefined);
+  try {
+    waitUntil(settled);
+  } catch {
+    // Not on Vercel, or no request context: the promise still runs to
+    // completion in a long-lived process.
+  }
+}
+
+export const CACHE_PREFIX = "par:v1";
 
 interface Envelope<T> {
   /** Payload. */
@@ -134,7 +160,7 @@ export async function cached<T>(
       };
     }
     // Fresh enough to serve, old enough to refresh behind the reader.
-    void load(key, loader, ttlSeconds, staleSeconds).catch(() => undefined);
+    refreshInBackground(load(key, loader, ttlSeconds, staleSeconds));
     return {
       data: fromL1.envelope.v as T,
       ageSeconds,
@@ -152,7 +178,7 @@ export async function cached<T>(
         hardExpiry: fromRedis.t + (ttlSeconds + staleSeconds) * 1000,
       });
       if (ageSeconds > ttlSeconds) {
-        void load(key, loader, ttlSeconds, staleSeconds).catch(() => undefined);
+        refreshInBackground(load(key, loader, ttlSeconds, staleSeconds));
         return { data: fromRedis.v, ageSeconds, stale: true, tier: "redis" };
       }
       return { data: fromRedis.v, ageSeconds, stale: false, tier: "redis" };

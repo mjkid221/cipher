@@ -66,7 +66,7 @@ export async function fetchJson<T>(
         cache: "no-store",
         headers: {
           accept: "application/json",
-          "user-agent": "chain-aggregator/1.0 (+valuation research dashboard)",
+          "user-agent": "caliper/1.0 (+valuation research dashboard)",
           ...(body ? { "content-type": "application/json" } : {}),
           ...headers,
         },
@@ -135,6 +135,35 @@ export async function mapLimit<T, R>(
 
   await Promise.all(runners);
   return results;
+}
+
+export class DeadlineError extends UpstreamError {
+  constructor(label: string, ms: number) {
+    super(`${label} exceeded ${ms}ms deadline`, label);
+    this.name = "DeadlineError";
+  }
+}
+
+/**
+ * Reject after `ms` if `promise` has not settled.
+ *
+ * The underlying promise is *not* cancelled. That is the point: a source that
+ * misses the deadline on one request is usually a cold cache, and letting it run
+ * to completion means it writes its result to the cache and the next request
+ * gets it for free. Cancelling would make every cold path cold forever.
+ */
+export function deadline<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const clock = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new DeadlineError(label, ms)), ms);
+  });
+  return Promise.race([promise, clock]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
 }
 
 /**
