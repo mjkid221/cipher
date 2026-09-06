@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useId, useMemo, useState } from "react";
+
+import { Explain } from "~/components/ui/explain";
 
 import { cn } from "~/lib/cn";
 import { formatSigma, formatUsd, formatUsdAxis } from "~/lib/format";
@@ -18,6 +21,8 @@ export interface AlphaPoint {
   mispricing: number | null;
   confidence: number;
   trendResidual: number | null;
+  /** Chain logo, drawn inside the mark so a dot is identifiable at a glance. */
+  logoUrl?: string | null;
 }
 
 export interface AlphaRegression {
@@ -56,6 +61,17 @@ export function AlphaMap({
 }) {
   const { ref, width } = useMeasure<HTMLDivElement>();
   const [hovered, setHovered] = useState<string | null>(null);
+  const router = useRouter();
+
+  // A mark is a link to its chain. Hovering warms the route so the click lands
+  // on a page that is already there.
+  useEffect(() => {
+    if (hovered) router.prefetch(`/chain/${hovered}`);
+  }, [hovered, router]);
+  /** Logos that 404 or fail to decode, so the mark falls back per point. */
+  const [failedLogos, setFailedLogos] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const clipId = useId().replace(/[^a-zA-Z0-9-]/g, "");
 
   const plotWidth = Math.max(320, width) - MARGIN.left - MARGIN.right;
@@ -95,7 +111,9 @@ export function AlphaMap({
       point,
       cx: model.xScale(point.x),
       cy: model.yScale(Math.log10(point.marketCap)),
-      r: 3.5 + point.confidence * 5,
+      // Larger than a bare dot needed to be: a logo has to be recognisable.
+      // The surface halo below still keeps overlapping marks apart.
+      r: 7 + point.confidence * 5,
     }));
   }, [model]);
 
@@ -268,31 +286,83 @@ export function AlphaMap({
             </text>
 
             {/* marks */}
-            {positioned.map(({ point, cx, cy, r }) => {
+            {positioned.map(({ point, cx, cy, r }, index) => {
               const isActive = point.slug === active;
               const dimmed = active !== null && !isActive;
+              const hue = divergingHue(point.mispricing);
+              const showLogo =
+                Boolean(point.logoUrl) && !failedLogos.has(point.slug);
+              const clip = `${clipId}-mark-${index}`;
+              const inner = r - 1.25;
+
               return (
-                <g key={point.slug} opacity={dimmed ? 0.32 : 1}>
+                <g key={point.slug} opacity={dimmed ? 0.3 : 1}>
+                  {/* surface halo, so overlapping marks stay separate */}
                   <circle
                     cx={cx}
                     cy={cy}
-                    r={r + 1.5}
+                    r={r + 2}
                     fill="var(--color-surface)"
                   />
-                  <circle
-                    cx={cx}
-                    cy={cy}
-                    r={r}
-                    fill={divergingFill(point.mispricing, 45)}
-                    stroke={divergingHue(point.mispricing)}
-                    strokeWidth={isActive ? 1.75 : 1}
-                  />
+
+                  {showLogo ? (
+                    <>
+                      <clipPath id={clip}>
+                        <circle cx={cx} cy={cy} r={inner} />
+                      </clipPath>
+                      <circle
+                        cx={cx}
+                        cy={cy}
+                        r={inner}
+                        fill="var(--color-raised)"
+                      />
+                      <image
+                        href={point.logoUrl!}
+                        x={cx - inner}
+                        y={cy - inner}
+                        width={inner * 2}
+                        height={inner * 2}
+                        clipPath={`url(#${clip})`}
+                        preserveAspectRatio="xMidYMid slice"
+                        // Hover is a nearest-point scan over a transparent rect
+                        // below; an image here would swallow the pointer.
+                        pointerEvents="none"
+                        onError={() =>
+                          setFailedLogos((current) =>
+                            new Set(current).add(point.slug),
+                          )
+                        }
+                      />
+                      {/* The value gap moves to the ring: identity inside, the
+                          encoding outside, so brand colour never carries data. */}
+                      <circle
+                        cx={cx}
+                        cy={cy}
+                        r={r}
+                        fill="none"
+                        stroke={hue}
+                        strokeWidth={isActive ? 2.75 : 2}
+                      />
+                    </>
+                  ) : (
+                    <circle
+                      cx={cx}
+                      cy={cy}
+                      r={r}
+                      fill={divergingFill(point.mispricing, 45)}
+                      stroke={hue}
+                      strokeWidth={isActive ? 1.75 : 1}
+                    />
+                  )}
+
                   {(labelled.has(point.slug) || isActive) && (
                     <text
-                      x={cx + r + 5}
+                      x={cx + r + 6}
                       y={cy + 3.5}
                       fill={
-                        isActive ? "var(--color-ink)" : "var(--color-ink-secondary)"
+                        isActive
+                          ? "var(--color-ink)"
+                          : "var(--color-ink-secondary)"
                       }
                       fontSize={11}
                       fontWeight={isActive ? 600 : 500}
@@ -311,6 +381,10 @@ export function AlphaMap({
               fill="transparent"
               onMouseMove={handleMove}
               onMouseLeave={() => setHovered(null)}
+              onClick={() => {
+                if (hovered) router.push(`/chain/${hovered}`);
+              }}
+              style={{ cursor: hovered ? "pointer" : "default" }}
             />
           </g>
         </svg>
@@ -329,12 +403,17 @@ export function AlphaMap({
             background: "var(--color-overlay)",
           }}
         >
-          <div className="text-[13px] font-semibold">{tooltipEntry.point.name}</div>
+          <div className="text-[13px] font-semibold">
+            {tooltipEntry.point.name}
+          </div>
           <dl className="mt-1.5 space-y-1 text-[11.5px]">
-            <Row label="Market cap" value={formatUsd(tooltipEntry.point.marketCap)} />
+            <Row
+              label="Market cap"
+              value={formatUsd(tooltipEntry.point.marketCap)}
+            />
             <Row label="Scale index" value={tooltipEntry.point.x.toFixed(0)} />
             <Row
-              label="Vs trend"
+              label={readTrend(tooltipEntry.point.trendResidual)}
               value={formatSigma(tooltipEntry.point.trendResidual)}
               tone={
                 tooltipEntry.point.trendResidual === null
@@ -343,12 +422,25 @@ export function AlphaMap({
               }
             />
           </dl>
+          <div className="text-ink-faint mt-1.5 text-[10.5px]">
+            Click to open the chain
+          </div>
         </div>
       )}
 
       <Legend regression={regression} />
     </div>
   );
+}
+
+/** Turns a residual into words, so the σ figure is never the only reading. */
+function readTrend(residual: number | null): string {
+  if (residual === null) return "Vs trend";
+  if (residual <= -1) return "Well below trend";
+  if (residual < -0.25) return "Below trend";
+  if (residual <= 0.25) return "On trend";
+  if (residual < 1) return "Above trend";
+  return "Well above trend";
 }
 
 function Row({
@@ -363,7 +455,10 @@ function Row({
   return (
     <div className="flex items-baseline justify-between gap-4">
       <dt className="text-ink-muted">{label}</dt>
-      <dd className="tnum font-medium" style={tone ? { color: tone } : undefined}>
+      <dd
+        className="tnum font-medium"
+        style={tone ? { color: tone } : undefined}
+      >
         {value}
       </dd>
     </div>
@@ -388,8 +483,10 @@ function Legend({ regression }: { regression: AlphaRegression | null }) {
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-ink-muted">Dot size</span>
-        <span className="text-ink-faint">data confidence</span>
+        <span className="text-ink-muted">Ring</span>
+        <span className="text-ink-faint">
+          value gap · size is data confidence
+        </span>
       </div>
 
       <div className="flex items-center gap-2">
@@ -401,9 +498,10 @@ function Legend({ regression }: { regression: AlphaRegression | null }) {
         <span className="text-ink-faint">
           peer trend
           {regression
-            ? ` · R² ${regression.rSquared.toFixed(2)} · shaded band ±1σ`
+            ? " · shaded band holds about 2 chains in 3"
             : " unavailable"}
         </span>
+        <Explain term="trendBand" side="top" />
       </div>
     </div>
   );

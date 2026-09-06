@@ -48,7 +48,10 @@ export function AreaChart({
       plotHeight - ((value - lo) / (hi - lo || 1)) * plotHeight;
 
     const line = clean
-      .map((value, index) => `${index === 0 ? "M" : "L"}${x(index).toFixed(2)},${y(value).toFixed(2)}`)
+      .map(
+        (value, index) =>
+          `${index === 0 ? "M" : "L"}${x(index).toFixed(2)},${y(value).toFixed(2)}`,
+      )
       .join(" ");
     const area = `${line} L${plotWidth},${plotHeight} L0,${plotHeight} Z`;
 

@@ -90,7 +90,10 @@ export function DivergingBar({
       </div>
       <span
         className="tnum w-[34px] text-right text-[13px] font-medium"
-        style={{ color: value === null ? "var(--color-ink-muted)" : divergingHue(value) }}
+        style={{
+          color:
+            value === null ? "var(--color-ink-muted)" : divergingHue(value),
+        }}
       >
         {formatSigned(value)}
       </span>
@@ -121,17 +124,24 @@ export function RatioMeter({
   return (
     <div className={cn("relative h-[6px] w-full min-w-[64px]", className)}>
       <div className="bg-grid absolute inset-0 rounded-full" />
+      {/*
+        Longhand `backgroundColor`, and every number rounded. React compares
+        inline styles against what the browser parsed from the server HTML: a
+        `background` shorthand comes back expanded into nine longhands, and a
+        17-digit percentage comes back at six, so the meter tripped a hydration
+        mismatch on every page load until both were pinned down.
+      */}
       <div
         className="absolute inset-y-0 w-px"
-        style={{ left: "50%", background: "var(--color-axis)" }}
+        style={{ left: "50%", backgroundColor: "var(--color-axis)" }}
       />
       <div
         className="absolute inset-y-0 rounded-full"
         style={{
-          left: cheaper ? `${50 - magnitude}%` : "calc(50% + 1px)",
-          width: `${Math.max(1.5, magnitude - 0.5)}%`,
-          background: cheaper ? "var(--color-under)" : "var(--color-over)",
-          opacity: 0.32 + Math.abs(clamped) * 0.68,
+          left: cheaper ? `${(50 - magnitude).toFixed(3)}%` : "calc(50% + 1px)",
+          width: `${Math.max(1.5, magnitude - 0.5).toFixed(3)}%`,
+          backgroundColor: cheaper ? "var(--color-under)" : "var(--color-over)",
+          opacity: Number((0.32 + Math.abs(clamped) * 0.68).toFixed(3)),
         }}
       />
     </div>

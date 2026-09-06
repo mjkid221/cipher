@@ -1,15 +1,26 @@
 "use client";
 
+import { fundamentalsGrade } from "~/lib/grade";
 import Link from "next/link";
 import { ArrowLeft, ArrowUpRight, TriangleAlert } from "lucide-react";
 import { useMemo } from "react";
 
 import { AlphaMap, type AlphaPoint } from "~/components/chart/alpha-map";
+import { OutletMark } from "~/components/news/outlet-mark";
+import { ParScale } from "~/components/chart/par-scale";
 import { AreaChart } from "~/components/chart/area-chart";
 import { PercentileBar, RatioMeter } from "~/components/chart/bars";
+import { FlowMap } from "~/components/chart/flow-map";
 import { PageHeader } from "~/components/header";
 import { SiteFooter } from "~/components/site-footer";
-import { ChainAvatar, Delta, Panel, TierBadge } from "~/components/ui/primitives";
+import { Explain } from "~/components/ui/explain";
+import {
+  ChainAvatar,
+  Delta,
+  Panel,
+  TierBadge,
+} from "~/components/ui/primitives";
+import type { GlossaryTerm } from "~/lib/glossary";
 import {
   formatCount,
   formatMultiple,
@@ -52,17 +63,24 @@ const MULTIPLE_ROWS: {
     label: "Market cap ÷ annualised DEX volume",
     note: "Valuation against trading throughput.",
   },
+  {
+    key: "mcapToRwa",
+    label: "Market cap ÷ real-world assets",
+    note: "How the token is valued against tokenised off-chain capital on the chain.",
+  },
 ];
 
 const METRIC_ROWS: {
   key: string;
   label: string;
+  term?: GlossaryTerm;
   value: (chain: ChainSnapshot) => string;
   delta?: (chain: ChainSnapshot) => number | null;
 }[] = [
   {
     key: "fees30d",
     label: "Chain fees, 30d",
+    term: "chainFees",
     value: (c) => formatUsd(c.metrics.fees30d),
     delta: (c) => c.metrics.feesChange30d,
   },
@@ -81,13 +99,34 @@ const METRIC_ROWS: {
   {
     key: "stablecoins",
     label: "Stablecoin float",
+    term: "stablecoins",
     value: (c) => formatUsd(c.metrics.stablecoins),
+    delta: (c) => c.metrics.stablecoinsChange30d,
   },
   {
     key: "dexVolume30d",
     label: "DEX volume, 30d",
+    term: "dexVolume",
     value: (c) => formatUsd(c.metrics.dexVolume30d),
     delta: (c) => c.metrics.dexVolumeChange30d,
+  },
+  {
+    key: "bridgeVolume30d",
+    label: "Bridged volume, 30d",
+    term: "bridgeVolume",
+    value: (c) =>
+      (c.metrics.bridgeVolume30d ?? 0) > 0
+        ? formatUsd(c.metrics.bridgeVolume30d)
+        : "none",
+    delta: (c) => c.metrics.bridgeVolumeChange30d,
+  },
+  {
+    key: "rwaValue",
+    label: "Real-world assets",
+    term: "rwa",
+    value: (c) =>
+      (c.metrics.rwaValue ?? 0) > 0 ? formatUsd(c.metrics.rwaValue) : "none",
+    delta: (c) => c.metrics.rwaChange30d,
   },
   {
     key: "protocols",
@@ -95,15 +134,31 @@ const METRIC_ROWS: {
     value: (c) => formatCount(c.metrics.protocols),
   },
   {
-    key: "dau",
-    label: "Daily active addresses",
-    value: (c) => formatCount(c.metrics.dau),
-    delta: (c) => c.metrics.dauChange30d,
+    key: "tradingVolume24h",
+    label: "Trading volume, 24h",
+    term: "attention",
+    value: (c) => formatUsd(c.metrics.tradingVolume24h),
   },
 ];
 
 export function ChainDetail({ slug }: { slug: string }) {
   const query = api.chains.detail.useQuery({ slug }, { staleTime: 60_000 });
+
+  /** Every rated peer's score, for the value scale beside this chain's figure. */
+  const peerScores = useMemo(
+    () =>
+      (query.data?.peers ?? [])
+        .map((peer) => peer.mispricing)
+        .filter((score): score is number => score !== null),
+    [query.data],
+  );
+
+  // Its own request, so the page is not waiting on a news fetch to render.
+  const chainName = query.data?.chain?.name;
+  const news = api.chains.news.useQuery(
+    { chain: chainName ?? "" },
+    { staleTime: 300_000, enabled: Boolean(chainName) },
+  );
 
   const points = useMemo<AlphaPoint[]>(
     () =>
@@ -119,9 +174,18 @@ export function ChainDetail({ slug }: { slug: string }) {
           mispricing: peer.mispricing,
           confidence: peer.confidence,
           trendResidual: peer.trendResidual,
+          logoUrl: peer.logoUrl,
         })),
     [query.data],
   );
+
+  const chainCorridors = useMemo(() => {
+    const name = query.data?.chain?.keys.llamaName;
+    if (!name) return [];
+    return (query.data?.meta.mayan?.corridors ?? []).filter(
+      (corridor) => corridor.from === name || corridor.to === name,
+    );
+  }, [query.data]);
 
   const marketCapDomain = useMemo(
     () =>
@@ -148,7 +212,8 @@ export function ChainDetail({ slug }: { slug: string }) {
         <h1 className="text-[20px] font-semibold">Chain not in the universe</h1>
         <p className="text-ink-muted mt-3 max-w-md text-[13px] leading-relaxed">
           Only chains with enough on-chain footprint to score are included. This
-          one either fell below the entry floor or is not tracked by the sources.
+          one either fell below the entry floor or is not tracked by the
+          sources.
         </p>
         <Link
           href="/"
@@ -175,7 +240,9 @@ export function ChainDetail({ slug }: { slug: string }) {
         ? `https://defillama.com/chain/${encodeURIComponent(chain.keys.llamaName)}`
         : null,
     },
-  ].filter((link): link is { label: string; href: string } => Boolean(link.href));
+  ].filter((link): link is { label: string; href: string } =>
+    Boolean(link.href),
+  );
 
   return (
     <>
@@ -199,7 +266,7 @@ export function ChainDetail({ slug }: { slug: string }) {
             }}
             aria-hidden
           />
-          <div className="grid gap-8 p-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:p-7">
+          <div className="grid gap-8 p-6 lg:grid-cols-[minmax(0,1fr)_480px] lg:p-7">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-3">
                 <ChainAvatar
@@ -271,29 +338,94 @@ export function ChainDetail({ slug }: { slug: string }) {
               </ul>
             </div>
 
-            <div className="lg:border-hairline flex flex-col justify-center lg:border-l lg:pl-7">
+            <div className="lg:border-hairline lg:border-l lg:pl-7">
               <div className="text-ink-muted text-[11px] font-medium tracking-wide uppercase">
                 Value gap
               </div>
-              <div
-                className="mt-1 text-[64px] leading-none font-semibold tracking-tighter"
-                style={{ color: tone }}
-              >
-                {formatSigned(chain.scores.mispricing)}
-              </div>
-              <p className="text-ink-muted mt-2 text-[12px] leading-relaxed">
-                {TIER_META[chain.tier].description}
-              </p>
-
-              <dl className="mt-5 space-y-3">
-                <ScoreRow label="Fundamentals" value={chain.scores.fundamental} />
-                <ScoreRow label="Momentum" value={chain.scores.momentum} />
-                <ScoreRow label="Cheapness" value={chain.scores.cheapness} />
-                <ScoreRow
-                  label="Data confidence"
-                  value={chain.scores.confidence * 100}
+              <div className="mt-1 grid gap-6 sm:grid-cols-[200px_minmax(0,1fr)]">
+                {/*
+                The distribution answers the question the figure raises — is
+                this score remarkable? It used to sit in the home-page hero,
+                where the figure was a headline; here the figure is the subject.
+              */}
+                <ParScale
+                  value={chain.scores.mispricing}
+                  peers={peerScores}
+                  className="hidden sm:block"
                 />
-              </dl>
+                <div>
+                  {chain.investable ? (
+                    <div
+                      className="text-[64px] leading-none font-semibold tracking-tighter"
+                      style={{ color: tone }}
+                    >
+                      {formatSigned(chain.scores.mispricing)}
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                      <TierBadge
+                        tier={chain.tier}
+                        detail={
+                          chain.tier === "no-token"
+                            ? fundamentalsGrade(chain.scores.fundamental)
+                            : null
+                        }
+                      />
+                    </div>
+                  )}
+                  <p className="text-ink-muted mt-2 text-[12px] leading-relaxed">
+                    {TIER_META[chain.tier].description}
+                  </p>
+                  {!chain.investable && chain.impliedMarketCap !== null && (
+                    <p className="text-ink-secondary border-hairline mt-3 border-t pt-3 text-[12.5px] leading-relaxed">
+                      At peer multiples, a token for {chain.name} would be worth
+                      about{" "}
+                      <span className="text-ink tnum font-medium">
+                        {formatUsd(chain.impliedMarketCap)}
+                      </span>
+                      {chain.impliedMarketCapLow !== null &&
+                        chain.impliedMarketCapHigh !== null && (
+                          <>
+                            {" "}
+                            (one-sigma range{" "}
+                            {formatUsd(chain.impliedMarketCapLow)}–
+                            {formatUsd(chain.impliedMarketCapHigh)})
+                          </>
+                        )}
+                      . That is what the market pays other chains for this level
+                      of activity, not a price: there is no token to compare it
+                      with, so no value gap is drawn.
+                    </p>
+                  )}
+
+                  <dl className="mt-5 space-y-3">
+                    <ScoreRow
+                      label="Fundamentals"
+                      term="fundamentals"
+                      value={chain.scores.fundamental}
+                    />
+                    <ScoreRow
+                      label="Momentum"
+                      term="momentum"
+                      value={chain.scores.momentum}
+                    />
+                    <ScoreRow
+                      label="Cheapness"
+                      term="cheapness"
+                      value={chain.scores.cheapness}
+                    />
+                    <ConfidenceRow value={chain.scores.confidence} />
+                  </dl>
+
+                  {chain.investable && chain.scores.cheapnessUnavailable && (
+                    <p className="text-ink-muted border-hairline mt-4 border-t pt-3 text-[11.5px] leading-relaxed">
+                      Fewer than two valuation ratios could be calculated, so
+                      this chain&rsquo;s value gap comes from its fundamentals
+                      rank and momentum alone.
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -311,13 +443,22 @@ export function ChainDetail({ slug }: { slug: string }) {
                   <th scope="col" className="px-5 py-2.5 text-left font-medium">
                     Ratio
                   </th>
-                  <th scope="col" className="px-3 py-2.5 text-right font-medium">
+                  <th
+                    scope="col"
+                    className="px-3 py-2.5 text-right font-medium"
+                  >
                     This chain
                   </th>
-                  <th scope="col" className="px-3 py-2.5 text-right font-medium">
+                  <th
+                    scope="col"
+                    className="px-3 py-2.5 text-right font-medium"
+                  >
                     Peer median
                   </th>
-                  <th scope="col" className="w-[110px] px-5 py-2.5 text-left font-medium">
+                  <th
+                    scope="col"
+                    className="w-[110px] px-5 py-2.5 text-left font-medium"
+                  >
                     Versus peers
                   </th>
                 </tr>
@@ -369,13 +510,18 @@ export function ChainDetail({ slug }: { slug: string }) {
                       scope="row"
                       className="text-ink-secondary px-5 py-3 text-left font-normal"
                     >
-                      {row.label}
+                      <span className="inline-flex items-center gap-1.5">
+                        {row.label}
+                        {row.term && <Explain term={row.term} />}
+                      </span>
                     </th>
                     <td className="tnum px-3 py-3 text-right font-medium">
                       {row.value(chain)}
                     </td>
                     <td className="px-3 py-3 text-right">
-                      {row.delta && <Delta value={row.delta(chain)} digits={0} />}
+                      {row.delta && (
+                        <Delta value={row.delta(chain)} digits={0} />
+                      )}
                     </td>
                     <td className="w-[120px] px-5 py-3">
                       <PercentileBar
@@ -413,59 +559,201 @@ export function ChainDetail({ slug }: { slug: string }) {
           </Panel>
 
           <Panel
-            title="Cross-chain routing"
-            subtitle="Transfers into and out of this chain across Mayan in the sampled window."
+            title={
+              <span className="inline-flex items-center gap-1.5">
+                Supply and flow
+                <Explain term="dilution" />
+              </span>
+            }
+            subtitle="What is still to be issued, and where capital is moving."
           >
-            {chain.metrics.bridgeInboundTransfers === null ? (
-              <p className="text-ink-muted text-[12.5px] leading-relaxed">
-                Mayan does not route to this chain, so there is no flow to
-                report. It is one of about a dozen destinations the explorer
-                covers.
-              </p>
-            ) : (
-              <dl className="space-y-3.5">
+            {(chain.metrics.dilutionOverhang !== null ||
+              chain.metrics.fromAllTimeHigh !== null) && (
+              <dl className="border-hairline mb-5 space-y-3.5 border-b pb-5">
+                {chain.metrics.dilutionOverhang !== null && (
+                  <SmallStat
+                    label="Dilution overhang"
+                    value={`${chain.metrics.dilutionOverhang.toFixed(2)}×`}
+                    inline
+                    tone={
+                      chain.metrics.dilutionOverhang >= 2
+                        ? "var(--color-warning)"
+                        : undefined
+                    }
+                  />
+                )}
+                {chain.metrics.fdv !== null && (
+                  <SmallStat
+                    label="Fully diluted value"
+                    value={formatUsd(chain.metrics.fdv)}
+                    inline
+                  />
+                )}
+                {chain.metrics.fromAllTimeHigh !== null && (
+                  <SmallStat
+                    label="From all-time high"
+                    value={formatPercent(chain.metrics.fromAllTimeHigh, {
+                      digits: 0,
+                    })}
+                    inline
+                  />
+                )}
+                <p className="text-ink-faint text-[11.5px] leading-relaxed">
+                  Every ratio on this page divides circulating market cap, so a
+                  large overhang means today&rsquo;s cheapness describes a
+                  fraction of the eventual supply.
+                </p>
+              </dl>
+            )}
+
+            {chain.metrics.netFlowUsd !== null && (
+              <dl className="border-hairline mb-5 space-y-3.5 border-b pb-5">
                 <SmallStat
-                  label="Transfers in"
-                  value={formatCount(chain.metrics.bridgeInboundTransfers)}
-                  inline
-                />
-                <SmallStat
-                  label="Transfers out"
-                  value={formatCount(chain.metrics.bridgeOutboundTransfers)}
-                  inline
-                />
-                <SmallStat
-                  label="Distinct traders"
-                  value={formatCount(chain.metrics.bridgeTraders)}
-                  inline
-                />
-                <SmallStat
-                  label="Estimated net flow, 24h"
-                  value={formatUsd(chain.metrics.bridgeNetUsd)}
+                  label="Net flow, all bridges"
+                  value={`${chain.metrics.netFlowUsd > 0 ? "+" : ""}${formatUsd(
+                    chain.metrics.netFlowUsd,
+                  )}`}
                   inline
                   tone={
-                    (chain.metrics.bridgeNetUsd ?? 0) >= 0
+                    chain.metrics.netFlowUsd >= 0
                       ? "var(--color-good)"
                       : "var(--color-critical)"
                   }
                 />
+                <SmallStat
+                  label="Arriving"
+                  value={formatUsd(chain.metrics.netFlowInUsd)}
+                  inline
+                />
+                <SmallStat
+                  label="Leaving"
+                  value={formatUsd(chain.metrics.netFlowOutUsd)}
+                  inline
+                />
+                <p className="text-ink-faint text-[11.5px] leading-relaxed">
+                  Artemis, covering every bridge it tracks across 35 chains,
+                  over 30 days.
+                </p>
+              </dl>
+            )}
+
+            {chain.metrics.routingInflowUsd === null ? (
+              <p className="text-ink-muted text-[12.5px] leading-relaxed">
+                Mayan does not route to this chain, so there is no per-route
+                breakdown. Nothing is deducted from the chain&rsquo;s score for
+                this.
+              </p>
+            ) : (
+              <dl className="space-y-3.5">
+                <SmallStat
+                  label="Via Mayan, arriving"
+                  value={formatUsd(chain.metrics.routingInflowUsd)}
+                  inline
+                />
+                <SmallStat
+                  label="Via Mayan, leaving"
+                  value={formatUsd(chain.metrics.routingOutflowUsd)}
+                  inline
+                />
+                <SmallStat
+                  label="Via Mayan, net"
+                  value={`${(chain.metrics.routingNetUsd ?? 0) > 0 ? "+" : ""}${formatUsd(
+                    chain.metrics.routingNetUsd,
+                  )}`}
+                  inline
+                  tone={
+                    (chain.metrics.routingNetUsd ?? 0) >= 0
+                      ? "var(--color-good)"
+                      : "var(--color-critical)"
+                  }
+                />
+                <SmallStat
+                  label="Share of all routing"
+                  value={formatPercent(
+                    (chain.metrics.routingShare ?? 0) * 100,
+                    {
+                      digits: 2,
+                      signed: false,
+                    },
+                  )}
+                  inline
+                />
                 <p className="text-ink-faint border-hairline border-t pt-3 text-[11.5px] leading-relaxed">
-                  Net flow is an estimate. Mayan&rsquo;s per-swap prices are
-                  unreliable, so chain shares are taken from transfer counts and
-                  applied to the protocol&rsquo;s reported 24h volume.
+                  Mayan reaches fewer chains than the figures above, but is the
+                  only source that names the individual routes. Neither is
+                  scored.
                 </p>
               </dl>
             )}
           </Panel>
         </div>
 
+        {chainCorridors.length > 0 && (
+          <Panel
+            title={`Routes through ${chain.name}`}
+            subtitle="The busiest cross-chain routes with this chain at one end."
+          >
+            <FlowMap corridors={chainCorridors} height={240} />
+          </Panel>
+        )}
+
+        {(news.data?.headlines.length ?? 0) > 0 && (
+          <Panel
+            title={`Headlines mentioning ${chain.name}`}
+            subtitle={
+              news.data?.coverage[0]
+                ? `${news.data.coverage[0].found} article${news.data.coverage[0].found === 1 ? "" : "s"} in the last ${news.data.windowDays} days, newest first.`
+                : "Newest first."
+            }
+            bodyClassName="p-0"
+          >
+            <ul>
+              {(news.data?.headlines ?? []).slice(0, 10).map((item) => (
+                <li key={item.id}>
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="hover:bg-raised border-hairline/60 group flex gap-3 border-b px-5 py-3 transition-colors last:border-b-0"
+                  >
+                    <OutletMark
+                      domain={item.sourceDomain}
+                      name={item.source}
+                      className="mt-0.5"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="text-ink group-hover:text-series-1 flex items-start gap-1.5 text-[13px] leading-snug font-medium transition-colors">
+                        <span className="min-w-0">{item.title}</span>
+                        <ArrowUpRight
+                          className="mt-0.5 size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60"
+                          aria-hidden
+                        />
+                      </span>
+                      <span className="text-ink-faint mt-1 block text-[11px]">
+                        {item.source}
+                        {item.publishedAt
+                          ? ` · ${new Date(item.publishedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
+                          : ""}
+                      </span>
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        )}
+
         <Panel
           title="Position against peers"
-          subtitle={`Where ${chain.name} sits on the same map as every other chain. ${
-            chain.trendResidual !== null
-              ? `It is ${formatSigma(chain.trendResidual)} from the trend line.`
-              : ""
-          }`}
+          subtitle={
+            chain.investable
+              ? `Where ${chain.name} sits on the same map as every other chain. ${
+                  chain.trendResidual !== null
+                    ? `It is ${formatSigma(chain.trendResidual)} from the trend line.`
+                    : ""
+                }`
+              : `${chain.name} has no token, so it has no place on this map. Its priced peers are shown for scale.`
+          }
           bodyClassName="px-4 pt-2 pb-4"
         >
           <AlphaMap
@@ -492,12 +780,63 @@ export function ChainDetail({ slug }: { slug: string }) {
   );
 }
 
-function ScoreRow({ label, value }: { label: string; value: number | null }) {
+function ScoreRow({
+  label,
+  term,
+  value,
+}: {
+  label: string;
+  term: GlossaryTerm;
+  value: number | null;
+}) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <dt className="text-ink-muted text-[12px]">{label}</dt>
+      <dt className="text-ink-muted inline-flex items-center gap-1.5 text-[12px]">
+        {label}
+        <Explain term={term} side="top" />
+      </dt>
       <dd>
         <PercentileBar value={value} width={64} />
+      </dd>
+    </div>
+  );
+}
+
+/**
+ * Confidence is not a percentile, so it does not get the percentile bar. It is a
+ * coverage-and-size blend, and showing it in the same encoding as the three
+ * rows above invited it to be read as a rank against peers.
+ */
+function ConfidenceRow({ value }: { value: number }) {
+  const pct = Math.round(value * 100);
+  const tone =
+    value >= 0.6
+      ? "var(--color-good)"
+      : value >= 0.45
+        ? "var(--color-warning)"
+        : "var(--color-critical)";
+
+  return (
+    <div className="border-hairline flex items-center justify-between gap-3 border-t pt-3">
+      <dt className="text-ink-muted inline-flex items-center gap-1.5 text-[12px]">
+        Data confidence
+        <Explain term="confidence" side="top" />
+      </dt>
+      <dd className="flex items-center gap-2">
+        <span className="flex gap-[3px]" aria-hidden>
+          {[0, 1, 2, 3, 4].map((step) => (
+            <span
+              key={step}
+              className="h-[10px] w-[5px] rounded-[1px]"
+              style={{
+                background: pct >= (step + 1) * 20 ? tone : "var(--color-grid)",
+              }}
+            />
+          ))}
+        </span>
+        <span className="tnum text-[12px] font-medium" style={{ color: tone }}>
+          {pct}%
+        </span>
       </dd>
     </div>
   );

@@ -1,0 +1,133 @@
+"use client";
+
+import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
+
+import {
+  DEFAULT_FILTERS,
+  PRESETS,
+  type Filters,
+  type LayerFilter,
+} from "~/components/filters";
+
+/**
+ * The table's configuration — filters and sort — kept across refreshes.
+ *
+ * A zustand store with the `persist` middleware, in localStorage under
+ * `par.filters`. Two decisions worth stating:
+ *
+ * **The search box is not persisted.** Presets, the layer, the toggles are
+ * settings — a reader who screens for deep value wants that back tomorrow.
+ * Typed text is a gesture; restoring "mon" into the search box on the next
+ * visit would hide most of the table for no reason the reader remembers.
+ *
+ * **Rehydration is deferred to after mount.** The page is server-rendered with
+ * the defaults; if the store read localStorage while the first client render
+ * ran, the two would disagree and React would report a hydration mismatch. So
+ * `skipHydration` is on and `Screen` calls `rehydrate()` in an effect — one
+ * frame of defaults, then the saved filters.
+ *
+ * Persisted values are checked against the presets and layers that exist now,
+ * so a preset renamed in a later release falls back to the default instead of
+ * matching nothing.
+ */
+
+const LAYERS: readonly LayerFilter[] = ["any", "L1", "L2"];
+
+/** The table's sort: a column key and a direction. */
+export interface TableSort {
+  key: string;
+  direction: "asc" | "desc";
+}
+
+export const DEFAULT_SORT: TableSort = { key: "mispricing", direction: "desc" };
+
+interface FiltersState {
+  filters: Filters;
+  sort: TableSort;
+  setFilters: (next: Filters) => void;
+  setSort: (next: TableSort | ((current: TableSort) => TableSort)) => void;
+  reset: () => void;
+}
+
+function sanitise(candidate: unknown): Filters {
+  const raw = (candidate ?? {}) as Partial<Record<keyof Filters, unknown>>;
+  return {
+    preset:
+      typeof raw.preset === "string" && raw.preset in PRESETS
+        ? (raw.preset as Filters["preset"])
+        : DEFAULT_FILTERS.preset,
+    layer: LAYERS.includes(raw.layer as LayerFilter)
+      ? (raw.layer as LayerFilter)
+      : DEFAULT_FILTERS.layer,
+    excludeValueTraps:
+      typeof raw.excludeValueTraps === "boolean"
+        ? raw.excludeValueTraps
+        : DEFAULT_FILTERS.excludeValueTraps,
+    onlyInvestable:
+      typeof raw.onlyInvestable === "boolean"
+        ? raw.onlyInvestable
+        : DEFAULT_FILTERS.onlyInvestable,
+    query: "",
+  };
+}
+
+function sanitiseSort(candidate: unknown): TableSort {
+  const raw = (candidate ?? {}) as Partial<Record<keyof TableSort, unknown>>;
+  return {
+    key: typeof raw.key === "string" && raw.key ? raw.key : DEFAULT_SORT.key,
+    direction:
+      raw.direction === "asc" || raw.direction === "desc"
+        ? raw.direction
+        : DEFAULT_SORT.direction,
+  };
+}
+
+export const useFiltersStore = create<FiltersState>()(
+  persist(
+    (set) => ({
+      filters: DEFAULT_FILTERS,
+      sort: DEFAULT_SORT,
+      setFilters: (next) => set({ filters: next }),
+      setSort: (next) =>
+        set((state) => ({
+          sort: typeof next === "function" ? next(state.sort) : next,
+        })),
+      reset: () => set({ filters: DEFAULT_FILTERS, sort: DEFAULT_SORT }),
+    }),
+    {
+      name: "par.filters",
+      // v2: "Has native token" defaults off, so token-less chains show with
+      // their badge. Saved v1 filters had it on for everyone who had touched
+      // any filter, which would have kept the new default from ever applying.
+      version: 2,
+      migrate: (persisted, version) => {
+        const saved = (persisted ?? {}) as {
+          filters?: Record<string, unknown>;
+        };
+        if (version < 2 && saved.filters) {
+          return {
+            ...saved,
+            filters: { ...saved.filters, onlyInvestable: false },
+          };
+        }
+        return saved;
+      },
+      storage: createJSONStorage(() => localStorage),
+      skipHydration: true,
+      partialize: (state) => ({
+        filters: { ...state.filters, query: "" },
+        sort: state.sort,
+      }),
+      merge: (persisted, current) => {
+        const saved = persisted as
+          { filters?: unknown; sort?: unknown } | undefined;
+        return {
+          ...current,
+          filters: sanitise(saved?.filters),
+          sort: sanitiseSort(saved?.sort),
+        };
+      },
+    },
+  ),
+);

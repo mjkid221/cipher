@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AlphaMap, type AlphaPoint } from "~/components/chart/alpha-map";
 import {
@@ -8,19 +8,27 @@ import {
   useCommandShortcut,
 } from "~/components/command-palette";
 import { Controls } from "~/components/controls";
-import { applyFilters, DEFAULT_FILTERS, type Filters } from "~/components/filters";
+import { applyFilters } from "~/components/filters";
 import { PageHeader } from "~/components/header";
 import { HeadlineCall } from "~/components/headline-call";
+import { MarketRail } from "~/components/market/market-rail";
 import { MethodologyPanel } from "~/components/methodology";
 import { SiteFooter } from "~/components/site-footer";
 import { ChainTable } from "~/components/table/chain-table";
-import { Panel, StatTile } from "~/components/ui/primitives";
+import { Panel } from "~/components/ui/primitives";
 import { cn } from "~/lib/cn";
-import { formatCount, formatUsd } from "~/lib/format";
+import { useFiltersStore } from "~/stores/filters-store";
 import { api } from "~/trpc/react";
 
 export function Screen() {
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  // Filters live in a persisted store so the last configuration survives a
+  // refresh. Rehydrated after mount, so the server-rendered defaults and the
+  // first client render agree; see the store for why.
+  const filters = useFiltersStore((state) => state.filters);
+  const setFilters = useFiltersStore((state) => state.setFilters);
+  useEffect(() => {
+    void useFiltersStore.persist.rehydrate();
+  }, []);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   useCommandShortcut(useCallback(() => setPaletteOpen((open) => !open), []));
@@ -42,11 +50,18 @@ export function Screen() {
   const methodology = api.chains.methodology.useQuery(undefined, {
     staleTime: Infinity,
   });
-
-  const utils = api.useUtils();
-  const refresh = api.chains.refresh.useMutation({
-    onSuccess: async () => {
-      await utils.chains.invalidate();
+  // The indicator rail. Prefetched on the server; re-polled while any source
+  // is still warming or answered badly when the page was built, so a tile that
+  // came up "unavailable" recovers without a reload.
+  const brief = api.market.brief.useQuery(undefined, {
+    staleTime: 60_000,
+    placeholderData: (previous) => previous,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return false;
+      const degraded =
+        data.warming || data.sources.some((source) => source.status !== "ok");
+      return degraded ? 15_000 : false;
     },
   });
 
@@ -92,6 +107,9 @@ export function Screen() {
 
   const points = useMemo<AlphaPoint[]>(
     () =>
+      // Only priced chains. A token-less chain has nothing on the y-axis but a
+      // number borrowed from the trend line, which drew a dot that could only
+      // ever sit on the line; it belongs in the table, not here.
       visible
         .filter(
           (chain) =>
@@ -106,6 +124,7 @@ export function Screen() {
           mispricing: chain.scores.mispricing,
           confidence: chain.scores.confidence,
           trendResidual: chain.trendResidual,
+          logoUrl: chain.logoUrl,
         })),
     [visible],
   );
@@ -120,12 +139,7 @@ export function Screen() {
 
   return (
     <>
-      <PageHeader
-        meta={meta}
-        onRefresh={() => refresh.mutate()}
-        refreshing={refresh.isPending}
-        onOpenPalette={() => setPaletteOpen(true)}
-      />
+      <PageHeader meta={meta} onOpenPalette={() => setPaletteOpen(true)} />
 
       <main
         className={cn(
@@ -133,68 +147,52 @@ export function Screen() {
           list.isFetching && "opacity-70",
         )}
       >
-        <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
+        {/*
+          Hero, rail, alpha map. Row one is `auto`, so the hero keeps its natural
+          height; the rail spans both rows, so at `xl` it runs the full height of
+          hero plus alpha map and its tiles stretch to fill. In the DOM the rail
+          comes second, which is where it lands below `xl`: under the hero.
+        */}
+        <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px] xl:grid-rows-[auto_1fr]">
           {headline && (
-            <HeadlineCall chain={headline} universeSize={meta.universeSize} />
+            <HeadlineCall
+              id="headline"
+              chain={headline}
+              universeSize={meta.universeSize}
+              belowPar={deepValue}
+              className="xl:col-start-1 xl:row-start-1"
+            />
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
-            <StatTile
-              label="Underpriced"
-              value={<span className="tnum">{deepValue}</span>}
-              hint={`of ${meta.ratedCount} rated chains show a positive value gap`}
-              accent="var(--color-under)"
-            />
-            <StatTile
-              label="Cross-chain flow, 24h"
-              value={formatUsd(meta.mayan?.volume24h ?? null)}
-              hint={`${formatCount(meta.mayan?.swaps24h ?? null)} swaps · ${formatCount(
-                meta.mayan?.activeTraders24h ?? null,
-              )} traders routed through Mayan`}
-              accent="var(--color-series-3)"
-            />
-            <StatTile
-              label="Peer fit"
-              value={
-                meta.regression ? (
-                  <span className="tnum">
-                    R² {meta.regression.rSquared.toFixed(2)}
-                  </span>
-                ) : (
-                  "—"
-                )
-              }
-              hint={
-                meta.regression
-                  ? `Economic scale explains ${(meta.regression.rSquared * 100).toFixed(0)}% of what chains are worth. The rest is why a screen like this exists.`
-                  : "Not enough complete chains to fit a trend."
-              }
-              accent="var(--color-series-2)"
-            />
-          </div>
-        </section>
-
-        <Panel
-          title="The alpha map"
-          subtitle="Every chain plotted by what it earns against what it costs. The line is the peer trend; the shaded band is one standard deviation of the residuals. Points below the line are priced under what their economics support."
-          bodyClassName="px-4 pt-2 pb-4"
-        >
-          <AlphaMap
-            points={points}
-            yDomain={marketCapDomain}
-            regression={
-              meta.regression
-                ? {
-                    slope: meta.regression.slope,
-                    intercept: meta.regression.intercept,
-                    residualSd: meta.regression.residualSd,
-                    rSquared: meta.regression.rSquared,
-                    sampleSize: meta.regression.sampleSize,
-                  }
-                : null
-            }
+          <MarketRail
+            id="market-rail"
+            brief={brief.data}
+            className="xl:col-start-2 xl:row-span-2 xl:row-start-1"
           />
-        </Panel>
+
+          <Panel
+            title="The alpha map"
+            subtitle="Every chain plotted by what it earns against what it costs. The line is the peer trend; the shaded band is one standard deviation of the residuals. Points below the line are priced under what their economics support."
+            bodyClassName="px-4 pt-2 pb-4"
+            className="xl:col-start-1 xl:row-start-2 xl:self-start"
+          >
+            <AlphaMap
+              points={points}
+              yDomain={marketCapDomain}
+              regression={
+                meta.regression
+                  ? {
+                      slope: meta.regression.slope,
+                      intercept: meta.regression.intercept,
+                      residualSd: meta.regression.residualSd,
+                      rSquared: meta.regression.rSquared,
+                      sampleSize: meta.regression.sampleSize,
+                    }
+                  : null
+              }
+            />
+          </Panel>
+        </section>
 
         <Controls
           filters={filters}
@@ -207,17 +205,17 @@ export function Screen() {
           <ChainTable chains={visible} feeMultipleMedian={feeMultipleMedian} />
         </Panel>
 
-        <MethodologyPanel methodology={methodology.data} meta={meta} />
+        <MethodologyPanel
+          methodology={methodology.data}
+          meta={meta}
+          example={headline}
+        />
       </main>
 
       <SiteFooter meta={meta} />
 
       {paletteOpen && (
-        <CommandPalette
-          chains={chains}
-          open
-          onOpenChange={setPaletteOpen}
-        />
+        <CommandPalette chains={chains} open onOpenChange={setPaletteOpen} />
       )}
     </>
   );
@@ -228,7 +226,9 @@ function BuildingState({ error }: { error?: string }) {
     <main className="mx-auto flex min-h-dvh max-w-[1560px] flex-col items-center justify-center px-6 text-center">
       {error ? (
         <>
-          <h1 className="text-[20px] font-semibold">Could not build the screen</h1>
+          <h1 className="text-[20px] font-semibold">
+            Could not build the screen
+          </h1>
           <p className="text-ink-muted mt-3 max-w-md text-[13px] leading-relaxed">
             {error}
           </p>

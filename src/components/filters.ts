@@ -16,7 +16,7 @@ export const PRESETS = {
   conviction: {
     label: "High conviction",
     description:
-      "Underpriced, growing, and with enough data behind it to act on: value gap ≥ 10, momentum in the top half, confidence ≥ 60%.",
+      "Undervalued, growing, and with enough data behind it to act on: at least 10 points undervalued, momentum in the top half, confidence ≥ 60%.",
   },
   value: {
     label: "Deep value",
@@ -34,10 +34,12 @@ export const PRESETS = {
 
 export type PresetKey = keyof typeof PRESETS;
 
+/** Layer filter. "any" leaves unclassified chains in. */
+export type LayerFilter = "any" | "L1" | "L2";
+
 export interface Filters {
   preset: PresetKey;
-  /** 0–1. Hides chains whose data is too thin to act on. */
-  minConfidence: number;
+  layer: LayerFilter;
   excludeValueTraps: boolean;
   onlyInvestable: boolean;
   query: string;
@@ -45,9 +47,11 @@ export interface Filters {
 
 export const DEFAULT_FILTERS: Filters = {
   preset: "all",
-  minConfidence: 0.35,
+  layer: "any",
   excludeValueTraps: false,
-  onlyInvestable: true,
+  // Off by default: chains without a token are shown with their own badge
+  // rather than hidden, since their fundamentals are the point of showing them.
+  onlyInvestable: false,
   query: "",
 };
 
@@ -84,9 +88,12 @@ export function applyFilters(
   const needle = filters.query.trim().toLowerCase();
 
   return chains.filter((chain) => {
+    // A chain CoinGecko does not classify is excluded from both sides rather
+    // than being guessed into one. Appchains and validiums genuinely fit
+    // neither label.
+    if (filters.layer !== "any" && chain.layer !== filters.layer) return false;
     if (filters.onlyInvestable && !chain.investable) return false;
     if (filters.excludeValueTraps && chain.valueTrapRisk) return false;
-    if (chain.scores.confidence < filters.minConfidence) return false;
     if (!matchesPreset(chain, filters.preset)) return false;
 
     if (needle) {

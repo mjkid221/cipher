@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { cn } from "~/lib/cn";
@@ -23,7 +24,10 @@ export function ChainAvatar({
   className?: string;
 }) {
   const [failed, setFailed] = useState(false);
-  const initials = name.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase();
+  const initials = name
+    .replace(/[^A-Za-z0-9]/g, "")
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <span
@@ -69,14 +73,21 @@ export function ChainAvatar({
 
 export function TierBadge({
   tier,
+  detail,
   className,
   compact = false,
 }: {
   tier: TierKey;
+  /** A qualifier after the label, e.g. the fundamentals grade of a token-less chain. */
+  detail?: string | null;
   className?: string;
   compact?: boolean;
 }) {
   const meta = TIER_META[tier];
+  // A glyph alone can say "undervalued" once the reader knows the ladder; it
+  // cannot say "no token" or "no market data". Those two keep their words.
+  const wordy = tier === "no-token" || tier === "unrated";
+  const showLabel = !compact || wordy;
 
   return (
     <span
@@ -95,7 +106,10 @@ export function TierBadge({
       <span aria-hidden className="text-[9px] leading-none">
         {meta.glyph}
       </span>
-      {!compact && meta.label}
+      {showLabel && meta.label}
+      {showLabel && detail && (
+        <span className="text-ink-muted font-normal">· {detail}</span>
+      )}
     </span>
   );
 }
@@ -117,7 +131,10 @@ export function Delta({
 
   return (
     <span
-      className={cn("tnum inline-flex items-center gap-1 text-[12px]", className)}
+      className={cn(
+        "tnum inline-flex items-center gap-1 text-[12px]",
+        className,
+      )}
       style={{ color: tone.color }}
     >
       {showGlyph && tone.glyph && (
@@ -140,7 +157,7 @@ export function StatTile({
   children,
   className,
 }: {
-  label: string;
+  label: React.ReactNode;
   value: React.ReactNode;
   hint?: React.ReactNode;
   accent?: string;
@@ -193,7 +210,9 @@ export function Panel({
         <header className="border-hairline flex flex-wrap items-start justify-between gap-3 border-b px-5 py-4">
           <div>
             {title && (
-              <h2 className="text-[14px] font-semibold tracking-tight">{title}</h2>
+              <h2 className="text-[14px] font-semibold tracking-tight">
+                {title}
+              </h2>
             )}
             {subtitle && (
               <p className="text-ink-muted mt-1 max-w-2xl text-[12.5px] leading-relaxed">
@@ -205,6 +224,62 @@ export function Panel({
         </header>
       )}
       <div className={cn("px-5 py-4", bodyClassName)}>{children}</div>
+    </section>
+  );
+}
+
+/* --------------------------------------------------------- collapsible ----- */
+
+/**
+ * A panel that stays out of the way until asked for.
+ *
+ * Used for the material that is worth having but does not belong in the reading
+ * path: the methodology, and the cross-chain flow detail. Both are things a
+ * reader wants occasionally and nobody wants competing with the ranking.
+ */
+export function CollapsiblePanel({
+  title,
+  summary,
+  children,
+  defaultOpen = false,
+  className,
+}: {
+  title: React.ReactNode;
+  summary?: React.ReactNode;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <section className={cn("panel overflow-hidden", className)}>
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className="hover:bg-raised flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors"
+      >
+        <div>
+          <h2 className="text-[14px] font-semibold tracking-tight">{title}</h2>
+          {summary && (
+            <p className="text-ink-muted mt-1 max-w-3xl text-[12.5px] leading-relaxed">
+              {summary}
+            </p>
+          )}
+        </div>
+        <ChevronDown
+          className={cn(
+            "text-ink-muted size-4 shrink-0 transition-transform",
+            open && "rotate-180",
+          )}
+          aria-hidden
+        />
+      </button>
+
+      {open && (
+        <div className="border-hairline border-t px-5 py-5">{children}</div>
+      )}
     </section>
   );
 }

@@ -1,18 +1,28 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
-import { DivergingBar, PercentileBar, RatioMeter } from "~/components/chart/bars";
-import { Sparkline } from "~/components/chart/sparkline";
-import { ChainAvatar, Delta, TierBadge } from "~/components/ui/primitives";
-import { cn } from "~/lib/cn";
 import {
-  formatMultiple,
-  formatPercent,
-  formatUsd,
-} from "~/lib/format";
+  DivergingBar,
+  PercentileBar,
+  RatioMeter,
+} from "~/components/chart/bars";
+import { DEFAULT_SORT, useFiltersStore } from "~/stores/filters-store";
+import { Sparkline } from "~/components/chart/sparkline";
+import { Explain } from "~/components/ui/explain";
+import { ChainAvatar, Delta, TierBadge } from "~/components/ui/primitives";
+import type { GlossaryTerm } from "~/lib/glossary";
+import { cn } from "~/lib/cn";
+import { formatMultiple, formatPercent, formatUsd } from "~/lib/format";
 import type { ChainSnapshot } from "~/server/domain/types";
+
+/**
+ * The chain column: index, avatar, name and symbol with the tier badge. Wide
+ * enough for the longest common names ("Avalanche C-Chain", "Immutable
+ * zkEVM") at the row's type size; anything longer truncates.
+ */
+const CHAIN_COLUMN_WIDTH = 280;
 
 type SortKey =
   | "rank"
@@ -25,6 +35,9 @@ type SortKey =
   | "fees30d"
   | "mcapToFees"
   | "priceChange30d"
+  | "stablecoins"
+  | "rwaValue"
+  | "bridgeVolume30d"
   | "confidence";
 
 interface Column {
@@ -32,11 +45,16 @@ interface Column {
   label: string;
   /** Shown on hover, explaining what the column actually measures. */
   hint?: string;
+  /** Opens the full definition. Every scored column carries one. */
+  term?: GlossaryTerm;
   align: "left" | "right";
   width: number;
   sticky?: boolean;
   value: (chain: ChainSnapshot) => number | null;
-  render: (chain: ChainSnapshot, context: { median: number | null }) => React.ReactNode;
+  render: (
+    chain: ChainSnapshot,
+    context: { median: number | null },
+  ) => React.ReactNode;
 }
 
 export function ChainTable({
@@ -49,16 +67,17 @@ export function ChainTable({
   className?: string;
 }) {
   const router = useRouter();
-  const [sort, setSort] = useState<{ key: SortKey; direction: "asc" | "desc" }>({
-    key: "mispricing",
-    direction: "desc",
-  });
+  // Sort lives in the persisted filters store, so it survives a refresh with the
+  // rest of the table's configuration.
+  const storedSort = useFiltersStore((state) => state.sort);
+  const setSort = useFiltersStore((state) => state.setSort);
 
   const columns = useMemo<Column[]>(
     () => [
       {
         key: "mispricing",
         label: "Value gap",
+        term: "valueGap",
         hint: "Fundamental rank versus market-cap rank, blended with valuation multiples and momentum. Positive means underpriced.",
         align: "left",
         width: 152,
@@ -68,6 +87,7 @@ export function ChainTable({
       {
         key: "fundamental",
         label: "Fundamentals",
+        term: "fundamentals",
         hint: "Percentile of fees, capital, stablecoin float, volume, users and ecosystem breadth.",
         align: "left",
         width: 112,
@@ -77,6 +97,7 @@ export function ChainTable({
       {
         key: "momentum",
         label: "Momentum",
+        term: "momentum",
         hint: "Percentile of 30-day growth in fees, capital, volume and cross-chain inflow.",
         align: "left",
         width: 112,
@@ -86,11 +107,22 @@ export function ChainTable({
       {
         key: "cheapness",
         label: "Cheapness",
+        term: "cheapness",
         hint: "Percentile of the valuation ratios, inverted. High means cheap versus peers.",
         align: "left",
         width: 112,
         value: (chain) => chain.scores.cheapness,
-        render: (chain) => <PercentileBar value={chain.scores.cheapness} />,
+        render: (chain) =>
+          chain.scores.cheapnessUnavailable ? (
+            <span
+              className="text-ink-faint text-[11.5px]"
+              title="Fewer than two valuation ratios available, so this chain's value gap comes from fundamentals and momentum alone."
+            >
+              too few ratios
+            </span>
+          ) : (
+            <PercentileBar value={chain.scores.cheapness} />
+          ),
       },
       {
         key: "marketCap",
@@ -98,11 +130,23 @@ export function ChainTable({
         align: "right",
         width: 104,
         value: (chain) => chain.metrics.marketCap,
-        render: (chain) => (
-          <span className="tnum text-[13px]">
-            {formatUsd(chain.metrics.marketCap)}
-          </span>
-        ),
+        render: (chain) =>
+          chain.metrics.marketCap === null &&
+          chain.impliedMarketCap !== null ? (
+            // No token: what the market pays peers for this level of activity.
+            // Muted and marked, because it is a comparison, not a price.
+            <span
+              className="tnum text-ink-muted text-[13px]"
+              title="Peer-implied value: what the market pays other chains for this level of activity. Not a price — this chain has no token."
+            >
+              ≈{formatUsd(chain.impliedMarketCap)}
+              <span className="text-ink-faint ml-1 text-[10px]">implied</span>
+            </span>
+          ) : (
+            <span className="tnum text-[13px]">
+              {formatUsd(chain.metrics.marketCap)}
+            </span>
+          ),
       },
       {
         key: "priceChange30d",
@@ -111,7 +155,9 @@ export function ChainTable({
         align: "right",
         width: 92,
         value: (chain) => chain.metrics.priceChange30d,
-        render: (chain) => <Delta value={chain.metrics.priceChange30d} digits={0} />,
+        render: (chain) => (
+          <Delta value={chain.metrics.priceChange30d} digits={0} />
+        ),
       },
       {
         key: "tvl",
@@ -136,9 +182,9 @@ export function ChainTable({
       {
         key: "fees30d",
         label: "Chain fees 30d",
-        hint: "Fees earned by the chain itself, not by the apps deployed on it.",
+        term: "chainFees",
         align: "right",
-        width: 132,
+        width: 168,
         value: (chain) => chain.metrics.fees30d,
         render: (chain) => (
           <div className="flex flex-col items-end gap-0.5">
@@ -152,9 +198,9 @@ export function ChainTable({
       {
         key: "mcapToFees",
         label: "MC / fees",
-        hint: "Market cap divided by annualised chain fees. The bar compares it with the peer median.",
+        term: "mcapToFees",
         align: "right",
-        width: 116,
+        width: 124,
         value: (chain) => chain.multiples.mcapToFees,
         render: (chain, { median }) => (
           <div className="flex flex-col items-end gap-1">
@@ -170,11 +216,67 @@ export function ChainTable({
         ),
       },
       {
+        key: "stablecoins",
+        label: "Stablecoins",
+        term: "stablecoins",
+        align: "right",
+        width: 128,
+        value: (chain) => chain.metrics.stablecoins,
+        render: (chain) => (
+          <div className="flex flex-col items-end gap-0.5">
+            <span className="tnum text-[13px]">
+              {formatUsd(chain.metrics.stablecoins)}
+            </span>
+            <Delta value={chain.metrics.stablecoinsChange30d} digits={0} />
+          </div>
+        ),
+      },
+      {
+        key: "rwaValue",
+        label: "RWA",
+        term: "rwa",
+        align: "right",
+        width: 122,
+        value: (chain) => chain.metrics.rwaValue,
+        render: (chain) => (
+          <div className="flex flex-col items-end gap-0.5">
+            <span className="tnum text-[13px]">
+              {(chain.metrics.rwaValue ?? 0) > 0
+                ? formatUsd(chain.metrics.rwaValue)
+                : "—"}
+            </span>
+            {(chain.metrics.rwaValue ?? 0) > 0 && (
+              <Delta value={chain.metrics.rwaChange30d} digits={0} />
+            )}
+          </div>
+        ),
+      },
+      {
+        key: "bridgeVolume30d",
+        label: "Bridged 30d",
+        term: "bridgeVolume",
+        align: "right",
+        width: 146,
+        value: (chain) => chain.metrics.bridgeVolume30d,
+        render: (chain) => (
+          <div className="flex flex-col items-end gap-0.5">
+            <span className="tnum text-[13px]">
+              {(chain.metrics.bridgeVolume30d ?? 0) > 0
+                ? formatUsd(chain.metrics.bridgeVolume30d)
+                : "—"}
+            </span>
+            {(chain.metrics.bridgeVolume30d ?? 0) > 0 && (
+              <Delta value={chain.metrics.bridgeVolumeChange30d} digits={0} />
+            )}
+          </div>
+        ),
+      },
+      {
         key: "confidence",
         label: "Confidence",
-        hint: "Share of model inputs the chain supplied, damped by how small it is.",
+        term: "confidence",
         align: "right",
-        width: 96,
+        width: 104,
         value: (chain) => chain.scores.confidence,
         render: (chain) => (
           <span
@@ -196,6 +298,15 @@ export function ChainTable({
     ],
     [],
   );
+
+  const tableWidth =
+    CHAIN_COLUMN_WIDTH + columns.reduce((sum, column) => sum + column.width, 0);
+
+  // Resolved after the columns exist: a stored key no column has any more
+  // falls back to the default rather than sorting by nothing.
+  const sort = columns.some((column) => column.key === storedSort.key)
+    ? storedSort
+    : DEFAULT_SORT;
 
   const sorted = useMemo(() => {
     const column = columns.find((entry) => entry.key === sort.key);
@@ -221,21 +332,40 @@ export function ChainTable({
 
   if (chains.length === 0) {
     return (
-      <div className="text-ink-muted px-5 py-16 text-center text-[13px]">
-        No chain matches these filters. Loosen the confidence floor or clear the
-        search.
+      <div className="px-5 py-16 text-center">
+        <p className="text-ink-muted text-[13px]">
+          No chain matches these filters.
+        </p>
       </div>
     );
   }
 
   return (
     <div className={cn("scroll-slim overflow-x-auto", className)}>
-      <table className="w-full border-collapse text-[13px]">
+      {/*
+        Fixed layout, every column with a declared width. In automatic layout
+        the chain column sized itself to the widest visible name or badge, so
+        filtering out a long-named chain re-measured it and every column to its
+        right jumped. Fixed layout makes widths content-independent; names that
+        do not fit truncate instead. `min-width: 100%` keeps the table filling a
+        wider container, with the extra shared in proportion to the widths.
+      */}
+      <table
+        className="table-fixed border-collapse text-[13px]"
+        style={{ width: tableWidth, minWidth: "100%" }}
+      >
+        <colgroup>
+          <col style={{ width: CHAIN_COLUMN_WIDTH }} />
+          {columns.map((column) => (
+            <col key={column.key} style={{ width: column.width }} />
+          ))}
+        </colgroup>
         <thead>
           <tr className="border-hairline border-b">
             <th
               scope="col"
-              className="bg-surface text-ink-muted sticky left-0 z-20 w-[248px] min-w-[248px] px-5 py-2.5 text-left text-[11px] font-medium tracking-wide uppercase"
+              style={{ width: CHAIN_COLUMN_WIDTH }}
+              className="text-ink-muted bg-surface sticky left-0 z-20 px-5 py-2.5 text-left text-[11px] font-medium tracking-wide uppercase"
             >
               Chain
             </th>
@@ -254,33 +384,43 @@ export function ChainTable({
                   }
                   style={{ width: column.width, minWidth: column.width }}
                   className={cn(
-                    "px-3 py-2.5 text-[11px] font-medium tracking-wide uppercase",
+                    "px-3 py-2.5 text-[11px] font-medium tracking-wide whitespace-nowrap uppercase",
                     column.align === "right" ? "text-right" : "text-left",
                   )}
                 >
-                  <button
-                    type="button"
-                    onClick={() => toggleSort(column.key)}
-                    title={column.hint}
+                  <span
                     className={cn(
-                      "inline-flex items-center gap-1 transition-colors",
+                      "inline-flex items-center gap-1.5",
                       column.align === "right" && "flex-row-reverse",
-                      active
-                        ? "text-ink"
-                        : "text-ink-muted hover:text-ink-secondary",
                     )}
                   >
-                    {column.label}
-                    <span
-                      aria-hidden
+                    <button
+                      type="button"
+                      onClick={() => toggleSort(column.key)}
+                      // A column with an Explain popover must not also carry a
+                      // native tooltip; the two race and both appear.
+                      title={column.term ? undefined : column.hint}
                       className={cn(
-                        "text-[8px] transition-opacity",
-                        active ? "opacity-100" : "opacity-0",
+                        "inline-flex items-center gap-1 transition-colors",
+                        column.align === "right" && "flex-row-reverse",
+                        active
+                          ? "text-ink"
+                          : "text-ink-muted hover:text-ink-secondary",
                       )}
                     >
-                      {sort.direction === "desc" ? "▼" : "▲"}
-                    </span>
-                  </button>
+                      {column.label}
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "text-[8px] transition-opacity",
+                          active ? "opacity-100" : "opacity-0",
+                        )}
+                      >
+                        {sort.direction === "desc" ? "▼" : "▲"}
+                      </span>
+                    </button>
+                    {column.term && <Explain term={column.term} />}
+                  </span>
                 </th>
               );
             })}
@@ -322,12 +462,15 @@ export function ChainTable({
                         </span>
                       )}
                     </div>
-                    <div className="mt-0.5 flex items-center gap-2">
+                    <div className="mt-0.5 flex min-w-0 items-center gap-2">
                       {chain.symbol && (
-                        <span className="text-ink-faint text-[10.5px] tracking-wide uppercase">
+                        <span className="text-ink-faint shrink-0 text-[10.5px] tracking-wide uppercase">
                           {chain.symbol}
                         </span>
                       )}
+                      {/* The grade is a word the Fundamentals column already
+                          gives as a number two cells to the right; here it only
+                          made the badge wider than the column. */}
                       <TierBadge tier={chain.tier} compact />
                     </div>
                   </div>

@@ -58,7 +58,29 @@
   --color-serious: #ec835a;
   --color-critical: #d03b3b;
 
-  --radius-card: 14px;
+  /*
+     -- geometry ----------------------------------------------------------
+     Three radii, and inner corners are always derived: an element inset by
+     `p` inside a `--radius-card` box gets `--radius-card - p`. Concentric
+     corners are most of why a nested layout reads as machined rather than
+     assembled.
+  */
+  --radius-control: 10px;
+  --radius-card: 18px;
+  --radius-window: 14px;
+
+  /*
+     -- motion ------------------------------------------------------------
+     One decelerating curve for almost everything, because a single easing
+     used consistently is what makes an interface feel like one object. The
+     emphasised curve is for things that travel a distance — a segmented
+     indicator sliding, a panel arriving.
+  */
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-emphasised: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-micro: 140ms;
+  --dur-standard: 240ms;
+  --dur-large: 420ms;
 }
 
 /* ===========================================================================
@@ -98,14 +120,14 @@ body::before {
   pointer-events: none;
   background:
     radial-gradient(
-      120ch 70ch at 18% -12%,
-      color-mix(in oklab, var(--color-series-1) 13%, transparent),
-      transparent 62%
+      130ch 78ch at 16% -14%,
+      color-mix(in oklab, #fff 4.5%, transparent),
+      transparent 60%
     ),
     radial-gradient(
-      90ch 60ch at 92% 4%,
-      color-mix(in oklab, var(--color-series-3) 7%, transparent),
-      transparent 60%
+      100ch 60ch at 88% -6%,
+      color-mix(in oklab, var(--color-series-1) 5%, transparent),
+      transparent 58%
     );
 }
 
@@ -134,6 +156,61 @@ body::after {
   background-color: var(--color-surface);
   border: 1px solid var(--color-hairline);
   border-radius: var(--radius-card);
+  /*
+     A one-pixel highlight along the top edge, as though a light above the page
+     were catching it. This is the whole trick behind surfaces that look raised
+     without a drop shadow: the eye reads the lit edge as geometry, and the card
+     stops looking like a rectangle of paint.
+  */
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in oklab, #fff 5%, transparent),
+    0 1px 2px -1px rgb(0 0 0 / 0.4);
+}
+
+/*
+   Frosted glass. `saturate` is not optional — blurring alone greys out whatever
+   is behind the panel, and pushing saturation back up is what keeps the colour
+   of the content underneath readable through it.
+*/
+@utility material {
+  background-color: color-mix(in oklab, var(--color-canvas) 72%, transparent);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+/* Elevation, as three fixed steps. Never an arbitrary shadow. */
+@utility elev-1 {
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in oklab, #fff 5%, transparent),
+    0 1px 2px -1px rgb(0 0 0 / 0.4);
+}
+@utility elev-2 {
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in oklab, #fff 6%, transparent),
+    0 4px 12px -4px rgb(0 0 0 / 0.5),
+    0 2px 4px -2px rgb(0 0 0 / 0.4);
+}
+@utility elev-3 {
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in oklab, #fff 7%, transparent),
+    0 18px 44px -12px rgb(0 0 0 / 0.7),
+    0 6px 14px -6px rgb(0 0 0 / 0.5);
+}
+
+/*
+   Display type. Optical sizing: large text needs negative tracking or it reads
+   loose, and the larger it gets the more it needs. These are the three sizes
+   the interface actually uses.
+*/
+@utility text-display {
+  letter-spacing: -0.022em;
+  font-weight: 600;
+}
+@utility text-figure {
+  letter-spacing: -0.035em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }
 
 @utility hide-scrollbar {
@@ -149,9 +226,18 @@ body::after {
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-series-1);
-  outline-offset: 2px;
-  border-radius: 4px;
+  outline: none;
+  /*
+     A halo instead of `outline`. An outline with an offset shifts the element's
+     apparent size the instant it is focused, which on a dense grid of controls
+     reads as the layout twitching. A ring drawn with box-shadow occupies no
+     space, so focus changes only the colour of the interface.
+  */
+  box-shadow:
+    0 0 0 2px var(--color-canvas),
+    0 0 0 4px color-mix(in oklab, var(--color-series-1) 85%, transparent);
+  position: relative;
+  z-index: 1;
 }
 
 /* Custom scrollbar on scroll containers, kept recessive. */
@@ -181,5 +267,42 @@ body::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* ===========================================================================
+   Entrance
+   ---------------------------------------------------------------------------
+   One page-load stagger, and nothing tied to scrolling. Content that fades in
+   as you scroll past it is fine on a marketing page and wrong here: a reader
+   scanning a ranking should never be waiting for a row to become legible.
+   ========================================================================= */
+
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.settle {
+  animation: settle var(--dur-large) var(--ease-standard) both;
+  animation-delay: var(--settle-delay, 0ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settle {
+    animation: none !important;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
   }
 }
