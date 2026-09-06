@@ -34,6 +34,7 @@ type SortKey =
   | "tvl"
   | "fees30d"
   | "mcapToFees"
+  | "dexVolume30d"
   | "priceChange30d"
   | "stablecoins"
   | "rwaValue"
@@ -212,6 +213,22 @@ export function ChainTable({
               reference={median}
               className="w-16"
             />
+          </div>
+        ),
+      },
+      {
+        key: "dexVolume30d",
+        label: "DEX volume 30d",
+        term: "dexVolume",
+        align: "right",
+        width: 150,
+        value: (chain) => chain.metrics.dexVolume30d,
+        render: (chain) => (
+          <div className="flex flex-col items-end gap-0.5">
+            <span className="tnum text-[13px]">
+              {formatUsd(chain.metrics.dexVolume30d)}
+            </span>
+            <Delta value={chain.metrics.dexVolumeChange30d} digits={0} />
           </div>
         ),
       },
