@@ -7,7 +7,9 @@ export function SiteFooter({ meta }: { meta: AggregateMeta }) {
       <div className="mx-auto max-w-[1560px] px-6 py-8">
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_auto]">
           <div>
-            <h2 className="text-[12.5px] font-semibold">Where the data comes from</h2>
+            <h2 className="text-[12.5px] font-semibold">
+              Where the data comes from
+            </h2>
             <ul className="mt-3 space-y-2">
               {meta.sources.map((source) => (
                 <li key={source.id} className="text-[12px] leading-relaxed">

@@ -160,7 +160,8 @@ export function WindowProgress({
             width: `${shown}%`,
             // Eased so the bar glides between animation frames rather than
             // stepping, and snaps quickly when the data finally lands.
-            transition: percent === 1 ? "width 180ms ease-out" : "width 120ms linear",
+            transition:
+              percent === 1 ? "width 180ms ease-out" : "width 120ms linear",
           }}
         />
       </div>

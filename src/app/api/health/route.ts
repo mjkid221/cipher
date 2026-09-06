@@ -45,23 +45,26 @@ export async function GET(request: Request) {
       buildMs: Date.now() - startedAt,
       meta,
       coverage: {
-        withMarketCap: chains.filter((c) => c.metrics.marketCap !== null).length,
+        withMarketCap: chains.filter((c) => c.metrics.marketCap !== null)
+          .length,
         withFees: chains.filter((c) => c.metrics.fees30d !== null).length,
-        withDexVolume: chains.filter((c) => c.metrics.dexVolume30d !== null).length,
-        withStablecoins: chains.filter((c) => c.metrics.stablecoins !== null).length,
+        withDexVolume: chains.filter((c) => c.metrics.dexVolume30d !== null)
+          .length,
+        withStablecoins: chains.filter((c) => c.metrics.stablecoins !== null)
+          .length,
         withRwa: chains.filter((c) => (c.metrics.rwaValue ?? 0) > 0).length,
         withBridgeVolume: chains.filter(
           (c) => (c.metrics.bridgeVolume30d ?? 0) > 0,
         ).length,
-        withMayanRouting: chains.filter(
-          (c) => c.metrics.routingNetUsd !== null,
-        ).length,
+        withMayanRouting: chains.filter((c) => c.metrics.routingNetUsd !== null)
+          .length,
         withStablecoinGrowth: chains.filter(
           (c) => c.metrics.stablecoinsChange30d !== null,
         ).length,
         withCapitalFlow: chains.filter((c) => c.metrics.netFlowUsd !== null)
           .length,
-        withArtemisIdentity: chains.filter((c) => c.keys.artemisId !== null).length,
+        withArtemisIdentity: chains.filter((c) => c.keys.artemisId !== null)
+          .length,
       },
       top,
       /** Residual distribution, so the regression can be judged not assumed. */

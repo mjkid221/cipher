@@ -1,4 +1,8 @@
-import { getMarketBrief, getMarketCycle, getMarketDetail } from "~/server/domain/market";
+import {
+  getMarketBrief,
+  getMarketCycle,
+  getMarketDetail,
+} from "~/server/domain/market";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 
 /**

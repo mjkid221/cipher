@@ -109,7 +109,9 @@ export function Controls({
         <span className="text-ink-muted tnum">
           Showing {resultCount} of {totalCount} chains
         </span>
-        <span className="text-ink-faint">{PRESETS[filters.preset].description}</span>
+        <span className="text-ink-faint">
+          {PRESETS[filters.preset].description}
+        </span>
         {JSON.stringify(filters) !== JSON.stringify(DEFAULT_FILTERS) && (
           <button
             type="button"

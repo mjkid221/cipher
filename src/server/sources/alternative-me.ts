@@ -60,11 +60,16 @@ export function fetchFearGreed() {
       let cursor = 0;
       for (let i = 0; i < days; i++) {
         const dayStart = first + i * dayMs;
-        while (cursor + 1 < entries.length && entries[cursor + 1]!.ts < dayStart + dayMs) cursor++;
+        while (
+          cursor + 1 < entries.length &&
+          entries[cursor + 1]!.ts < dayStart + dayMs
+        )
+          cursor++;
         const entry = entries[cursor]!;
         // Only advance onto an entry that belongs to this day or earlier.
         values[i] = entry.ts < dayStart + dayMs ? entry.value : values[i - 1]!;
-        classifications[i] = entry.ts < dayStart + dayMs ? entry.label : classifications[i - 1]!;
+        classifications[i] =
+          entry.ts < dayStart + dayMs ? entry.label : classifications[i - 1]!;
       }
 
       return {

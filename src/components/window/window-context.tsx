@@ -1,6 +1,12 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+} from "react";
 
 import { FlowsWindow } from "~/components/flows-window";
 import { MarketWindow } from "~/components/market/market-window";
@@ -42,7 +48,9 @@ export function WindowsProvider({ children }: { children: React.ReactNode }) {
   const [flows, setFlows] = useState<WindowState>("closed");
   const [news, setNews] = useState<WindowState>("closed");
   const [market, setMarket] = useState<WindowState>("closed");
-  const [marketSection, setMarketSection] = useState<MarketSection | null>(null);
+  const [marketSection, setMarketSection] = useState<MarketSection | null>(
+    null,
+  );
   // Incremented on every request so asking for the same section twice still
   // scrolls; a plain section value would not change and the effect not fire.
   const [marketRequest, setMarketRequest] = useState(0);
@@ -68,7 +76,15 @@ export function WindowsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ flows, toggleFlows, news, toggleNews, market, toggleMarket, openMarket }),
+    () => ({
+      flows,
+      toggleFlows,
+      news,
+      toggleNews,
+      market,
+      toggleMarket,
+      openMarket,
+    }),
     [flows, toggleFlows, news, toggleNews, market, toggleMarket, openMarket],
   );
 
