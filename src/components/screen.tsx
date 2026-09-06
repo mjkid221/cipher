@@ -143,7 +143,7 @@ export function Screen() {
 
       <main
         className={cn(
-          "mx-auto max-w-[1560px] space-y-6 px-6 py-7 transition-opacity",
+          "mx-auto max-w-[1560px] space-y-5 px-4 py-5 transition-opacity sm:space-y-6 sm:px-6 sm:py-7",
           list.isFetching && "opacity-70",
         )}
       >

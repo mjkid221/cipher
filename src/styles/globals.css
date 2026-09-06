@@ -306,3 +306,12 @@ body::after {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Touch targets: the ⓘ definition triggers are 14px glyphs inline with text.
+   On phones they get a 6px invisible halo, without moving anything. */
+@media (max-width: 639px) {
+  button[aria-label^="Definition:"] {
+    margin: -6px;
+    padding: 6px;
+  }
+}

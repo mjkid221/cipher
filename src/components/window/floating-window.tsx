@@ -326,7 +326,7 @@ export function FloatingWindow({
   // the page visible around its edges is not maximised, it is merely large.
   const style: React.CSSProperties =
     isMobile || maximized
-      ? { inset: isMobile ? "56px 0 0 0" : 0 }
+      ? { inset: 0 }
       : {
           left: geometry?.x ?? 0,
           top: geometry?.y ?? 0,
@@ -343,7 +343,7 @@ export function FloatingWindow({
       className={cn(
         "panel fixed z-80 flex flex-col overflow-hidden shadow-2xl shadow-black/70",
         "transition-[opacity,box-shadow] duration-200",
-        isMobile && "rounded-t-[14px] rounded-b-none",
+        isMobile && "rounded-none",
         // Full screen has no corners to round and must sit above the sticky
         // header, which otherwise shows through along the top edge.
         maximized && !isMobile && "z-100 rounded-none shadow-none",

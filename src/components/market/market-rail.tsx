@@ -63,7 +63,10 @@ export function MarketRail({
       aria-label="Market indicators"
       className={cn(
         "grid gap-3",
-        "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
+        // Phones: one row that scrolls sideways and snaps, instead of five tiles
+        // stacked for 800px before the map. Tablets and up: a grid.
+        "max-sm:scroll-slim max-sm:-mx-4 max-sm:snap-x max-sm:snap-mandatory max-sm:auto-cols-[minmax(280px,82%)] max-sm:grid-flow-col max-sm:overflow-x-auto max-sm:px-4 max-sm:pb-1 max-sm:[&>*]:snap-start",
+        "sm:grid-cols-2 lg:grid-cols-3",
         "xl:auto-rows-[minmax(min-content,1fr)] xl:grid-cols-1",
         className,
       )}

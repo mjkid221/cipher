@@ -39,7 +39,7 @@ export function PageHeader({
     <header className="material sticky top-0 z-40">
       <div
         className={cn(
-          "mx-auto flex max-w-[1560px] flex-wrap items-center gap-x-5 gap-y-3 px-6",
+          "mx-auto flex max-w-[1560px] flex-nowrap items-center gap-x-3 px-4 sm:flex-wrap sm:gap-x-5 sm:gap-y-3 sm:px-6",
           "transition-[padding]",
           condensed ? "py-2" : "py-3.5",
         )}
@@ -57,7 +57,7 @@ export function PageHeader({
           <span className="text-display text-[16px] leading-none">Caliper</span>
           <span
             className={cn(
-              "text-ink-faint hidden overflow-hidden text-[12px] whitespace-nowrap transition-all sm:inline-block",
+              "text-ink-faint hidden overflow-hidden text-[12px] whitespace-nowrap transition-all lg:inline-block",
               condensed ? "max-w-0 opacity-0" : "max-w-[42ch] opacity-100",
             )}
             style={{
@@ -69,7 +69,10 @@ export function PageHeader({
           </span>
         </Link>
 
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+        {/* On phones the bar is one row: icon-only window buttons, the source
+            dots without their count, and no freshness text or shortcut hint.
+            Three stacked rows made a sticky header 139px tall on a 390px phone. */}
+        <div className="ml-auto flex flex-nowrap items-center gap-1 sm:flex-wrap sm:gap-2">
           <MarketButton />
           <FlowsButton />
           <NewsButton />
@@ -80,7 +83,9 @@ export function PageHeader({
           />
 
           <SourceHealth meta={meta} />
-          <Snapshot meta={meta} />
+          <span className="hidden md:contents">
+            <Snapshot meta={meta} />
+          </span>
 
           {onOpenPalette && (
             <button
@@ -255,8 +260,10 @@ function WindowButton({
       type="button"
       onClick={onClick}
       aria-pressed={active}
+      aria-label={label}
+      title={label}
       className={cn(
-        "rounded-control flex items-center gap-1.5 border px-2.5 py-1.5 text-[12px] font-medium transition-colors",
+        "rounded-control flex min-h-9 items-center gap-1.5 border px-2.5 py-1.5 text-[12px] font-medium transition-colors",
         active
           ? "border-hairline bg-overlay text-ink elev-1"
           : "hover:bg-raised hover:text-ink text-ink-muted border-transparent",
@@ -264,7 +271,7 @@ function WindowButton({
       style={{ transitionDuration: "var(--dur-micro)" }}
     >
       {icon}
-      {label}
+      <span className="hidden md:inline">{label}</span>
     </button>
   );
 }
@@ -313,7 +320,12 @@ function SourceHealth({ meta }: { meta: AggregateMeta }) {
             />
           ))}
         </span>
-        <span style={trouble ? { color: tone } : undefined}>{summary}</span>
+        <span
+          className={cn(!trouble && "hidden md:inline")}
+          style={trouble ? { color: tone } : undefined}
+        >
+          {summary}
+        </span>
         <ChevronDown
           className="size-3 opacity-60 transition-transform group-focus-within/health:rotate-180 group-hover/health:rotate-180"
           aria-hidden
@@ -328,7 +340,7 @@ function SourceHealth({ meta }: { meta: AggregateMeta }) {
       */}
       <div
         className={cn(
-          "invisible absolute top-full right-0 z-50 w-85 pt-1.5 opacity-0",
+          "invisible absolute top-full right-0 z-50 w-[min(340px,calc(100vw-2rem))] pt-1.5 opacity-0",
           "-translate-y-1.5 scale-[0.98] transition-[opacity,transform]",
           "group-hover/health:visible group-hover/health:translate-y-0 group-hover/health:scale-100 group-hover/health:opacity-100",
           "group-focus-within/health:visible group-focus-within/health:translate-y-0 group-focus-within/health:scale-100 group-focus-within/health:opacity-100",

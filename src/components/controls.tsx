@@ -66,7 +66,7 @@ export function Controls({
           ]}
         />
 
-        <label className="border-hairline bg-surface focus-within:border-ink-faint flex items-center gap-2 rounded-full border px-3 py-1.5 transition-colors">
+        <label className="border-hairline bg-surface focus-within:border-ink-faint flex min-h-9 items-center gap-2 rounded-full border px-3 py-1.5 transition-colors max-sm:flex-1">
           <Search className="text-ink-faint size-3.5 shrink-0" aria-hidden />
           <input
             value={filters.query}
@@ -76,7 +76,7 @@ export function Controls({
             }}
             placeholder="Find a chain"
             aria-label="Find a chain"
-            className="placeholder:text-ink-muted text-ink w-[124px] bg-transparent text-[12.5px] outline-none"
+            className="placeholder:text-ink-muted text-ink w-[124px] bg-transparent text-[12.5px] outline-none max-sm:w-full"
           />
           {filters.query && (
             <button
@@ -105,7 +105,7 @@ export function Controls({
         />
       </div>
 
-      <div className="flex items-center gap-3 text-[12px]">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[12px]">
         <span className="text-ink-muted tnum">
           Showing {resultCount} of {totalCount} chains
         </span>

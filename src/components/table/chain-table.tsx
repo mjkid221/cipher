@@ -1,20 +1,31 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import {
   DivergingBar,
   PercentileBar,
   RatioMeter,
 } from "~/components/chart/bars";
-import { DEFAULT_SORT, useFiltersStore } from "~/stores/filters-store";
+import {
+  DEFAULT_SORT,
+  useFiltersStore,
+  type TableSort,
+} from "~/stores/filters-store";
 import { Sparkline } from "~/components/chart/sparkline";
 import { Explain } from "~/components/ui/explain";
 import { ChainAvatar, Delta, TierBadge } from "~/components/ui/primitives";
 import type { GlossaryTerm } from "~/lib/glossary";
 import { cn } from "~/lib/cn";
-import { formatMultiple, formatPercent, formatUsd } from "~/lib/format";
+import {
+  formatMultiple,
+  formatPercent,
+  formatSigned,
+  formatUsd,
+} from "~/lib/format";
+import { divergingHue } from "~/lib/palette";
 import type { ChainSnapshot } from "~/server/domain/types";
 
 /**
@@ -358,8 +369,17 @@ export function ChainTable({
   }
 
   return (
-    <div className={cn("scroll-slim overflow-x-auto", className)}>
-      {/*
+    <div className={className}>
+      {/* Phones get the ranking as cards; the table needs 1,900px. */}
+      <MobileList
+        rows={sorted}
+        columns={columns}
+        sort={sort}
+        setSort={setSort}
+      />
+
+      <div className="scroll-slim hidden overflow-x-auto md:block">
+        {/*
         Fixed layout, every column with a declared width. In automatic layout
         the chain column sized itself to the widest visible name or badge, so
         filtering out a long-named chain re-measured it and every column to its
@@ -367,93 +387,225 @@ export function ChainTable({
         do not fit truncate instead. `min-width: 100%` keeps the table filling a
         wider container, with the extra shared in proportion to the widths.
       */}
-      <table
-        className="table-fixed border-collapse text-[13px]"
-        style={{ width: tableWidth, minWidth: "100%" }}
-      >
-        <colgroup>
-          <col style={{ width: CHAIN_COLUMN_WIDTH }} />
-          {columns.map((column) => (
-            <col key={column.key} style={{ width: column.width }} />
-          ))}
-        </colgroup>
-        <thead>
-          <tr className="border-hairline border-b">
-            <th
-              scope="col"
-              style={{ width: CHAIN_COLUMN_WIDTH }}
-              className="text-ink-muted bg-surface sticky left-0 z-20 px-5 py-2.5 text-left text-[11px] font-medium tracking-wide uppercase"
-            >
-              Chain
-            </th>
-            {columns.map((column) => {
-              const active = sort.key === column.key;
-              return (
-                <th
-                  key={column.key}
-                  scope="col"
-                  aria-sort={
-                    active
-                      ? sort.direction === "desc"
-                        ? "descending"
-                        : "ascending"
-                      : "none"
-                  }
-                  style={{ width: column.width, minWidth: column.width }}
-                  className={cn(
-                    "px-3 py-2.5 text-[11px] font-medium tracking-wide whitespace-nowrap uppercase last:pr-6",
-                    column.align === "right" ? "text-right" : "text-left",
-                  )}
-                >
-                  <span
+        <table
+          className="table-fixed border-collapse text-[13px]"
+          style={{ width: tableWidth, minWidth: "100%" }}
+        >
+          <colgroup>
+            <col style={{ width: CHAIN_COLUMN_WIDTH }} />
+            {columns.map((column) => (
+              <col key={column.key} style={{ width: column.width }} />
+            ))}
+          </colgroup>
+          <thead>
+            <tr className="border-hairline border-b">
+              <th
+                scope="col"
+                style={{ width: CHAIN_COLUMN_WIDTH }}
+                className="text-ink-muted bg-surface sticky left-0 z-20 px-5 py-2.5 text-left text-[11px] font-medium tracking-wide uppercase"
+              >
+                Chain
+              </th>
+              {columns.map((column) => {
+                const active = sort.key === column.key;
+                return (
+                  <th
+                    key={column.key}
+                    scope="col"
+                    aria-sort={
+                      active
+                        ? sort.direction === "desc"
+                          ? "descending"
+                          : "ascending"
+                        : "none"
+                    }
+                    style={{ width: column.width, minWidth: column.width }}
                     className={cn(
-                      "inline-flex items-center gap-1.5",
-                      column.align === "right" && "flex-row-reverse",
+                      "px-3 py-2.5 text-[11px] font-medium tracking-wide whitespace-nowrap uppercase last:pr-6",
+                      column.align === "right" ? "text-right" : "text-left",
                     )}
                   >
-                    <button
-                      type="button"
-                      onClick={() => toggleSort(column.key)}
-                      // A column with an Explain popover must not also carry a
-                      // native tooltip; the two race and both appear.
-                      title={column.term ? undefined : column.hint}
+                    <span
                       className={cn(
-                        "inline-flex items-center gap-1 transition-colors",
+                        "inline-flex items-center gap-1.5",
                         column.align === "right" && "flex-row-reverse",
-                        active
-                          ? "text-ink"
-                          : "text-ink-muted hover:text-ink-secondary",
                       )}
                     >
-                      {column.label}
-                      <span
-                        aria-hidden
+                      <button
+                        type="button"
+                        onClick={() => toggleSort(column.key)}
+                        // A column with an Explain popover must not also carry a
+                        // native tooltip; the two race and both appear.
+                        title={column.term ? undefined : column.hint}
                         className={cn(
-                          "text-[8px] transition-opacity",
-                          active ? "opacity-100" : "opacity-0",
+                          "inline-flex items-center gap-1 transition-colors",
+                          column.align === "right" && "flex-row-reverse",
+                          active
+                            ? "text-ink"
+                            : "text-ink-muted hover:text-ink-secondary",
                         )}
                       >
-                        {sort.direction === "desc" ? "▼" : "▲"}
-                      </span>
-                    </button>
-                    {column.term && <Explain term={column.term} />}
-                  </span>
-                </th>
-              );
-            })}
-          </tr>
-        </thead>
+                        {column.label}
+                        <span
+                          aria-hidden
+                          className={cn(
+                            "text-[8px] transition-opacity",
+                            active ? "opacity-100" : "opacity-0",
+                          )}
+                        >
+                          {sort.direction === "desc" ? "▼" : "▲"}
+                        </span>
+                      </button>
+                      {column.term && <Explain term={column.term} />}
+                    </span>
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
 
-        <tbody>
-          {sorted.map((chain, index) => (
-            <tr
-              key={chain.slug}
-              onClick={() => router.push(`/chain/${chain.slug}`)}
-              className="border-hairline/60 group hover:bg-raised cursor-pointer border-b transition-colors last:border-b-0"
-            >
-              <th
-                scope="row"
-                className="bg-surface group-hover:bg-raised sticky left-0 z-10 px-5 py-2.5 text-left font-normal transition-colors"
+          <tbody>
+            {sorted.map((chain, index) => (
+              <tr
+                key={chain.slug}
+                onClick={() => router.push(`/chain/${chain.slug}`)}
+                className="border-hairline/60 group hover:bg-raised cursor-pointer border-b transition-colors last:border-b-0"
+              >
+                <th
+                  scope="row"
+                  className="bg-surface group-hover:bg-raised sticky left-0 z-10 px-5 py-2.5 text-left font-normal transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="tnum text-ink-faint w-5 shrink-0 text-right text-[11px]">
+                      {index + 1}
+                    </span>
+                    <ChainAvatar
+                      name={chain.name}
+                      logoUrl={chain.logoUrl}
+                      brandColor={chain.brandColor}
+                    />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-[13.5px] font-medium">
+                          {chain.name}
+                        </span>
+                        {chain.valueTrapRisk && (
+                          <span
+                            title="Cheap on the multiples but the underlying activity is contracting."
+                            className="text-[9px] leading-none"
+                            style={{ color: "var(--color-warning)" }}
+                          >
+                            ⚑
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-0.5 flex min-w-0 items-center gap-2">
+                        {chain.symbol && (
+                          <span className="text-ink-faint shrink-0 text-[10.5px] tracking-wide uppercase">
+                            {chain.symbol}
+                          </span>
+                        )}
+                        {/* The grade is a word the Fundamentals column already
+                          gives as a number two cells to the right; here it only
+                          made the badge wider than the column. */}
+                        <TierBadge tier={chain.tier} compact />
+                      </div>
+                    </div>
+                  </div>
+                </th>
+
+                {columns.map((column) => (
+                  <td
+                    key={column.key}
+                    className={cn(
+                      "px-3 py-2.5 align-middle last:pr-6",
+                      column.align === "right" ? "text-right" : "text-left",
+                    )}
+                  >
+                    {column.render(chain, { median: feeMultipleMedian })}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- phones ---- */
+
+/**
+ * The ranking on a phone: one card per chain instead of a 1,900px table that
+ * showed only its sticky first column. Each card leads with the value gap,
+ * then the three scores and the three sizes a reader compares first. Sorting
+ * moves into a select, since the column headers that carried it are gone, and
+ * shares the same persisted store as the table.
+ */
+function MobileList({
+  rows,
+  columns,
+  sort,
+  setSort,
+}: {
+  rows: readonly ChainSnapshot[];
+  columns: readonly Column[];
+  sort: TableSort;
+  setSort: (next: TableSort | ((current: TableSort) => TableSort)) => void;
+}) {
+  // Eighty-five cards at once made a 15,000px page. The first twenty are the
+  // ones a sort was chosen for; the rest are a tap away, and a new sort or
+  // filter starts from the top again.
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? rows : rows.slice(0, MOBILE_PAGE);
+  return (
+    <div className="md:hidden">
+      <div className="border-hairline flex items-center gap-2 border-b px-4 py-2.5 text-[12px]">
+        <label htmlFor="mobile-sort" className="text-ink-muted shrink-0">
+          Sort by
+        </label>
+        <select
+          id="mobile-sort"
+          value={sort.key}
+          onChange={(event) =>
+            setSort({ key: event.target.value, direction: "desc" })
+          }
+          className="border-hairline bg-surface text-ink rounded-control min-h-9 min-w-0 flex-1 border px-2 text-[12.5px]"
+        >
+          {columns.map((column) => (
+            <option key={column.key} value={column.key}>
+              {column.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() =>
+            setSort((current) => ({
+              ...current,
+              direction: current.direction === "desc" ? "asc" : "desc",
+            }))
+          }
+          aria-label={
+            sort.direction === "desc"
+              ? "Sorted high to low; switch to low to high"
+              : "Sorted low to high; switch to high to low"
+          }
+          className="border-hairline text-ink-secondary rounded-control min-h-9 min-w-9 border text-[11px]"
+        >
+          {sort.direction === "desc" ? "▼" : "▲"}
+        </button>
+      </div>
+
+      <ul className="divide-hairline/60 divide-y">
+        {visible.map((chain, index) => {
+          const gap = chain.scores.mispricing;
+          return (
+            <li key={chain.slug}>
+              <Link
+                href={`/chain/${chain.slug}`}
+                className="active:bg-raised block px-4 py-3 transition-colors"
               >
                 <div className="flex items-center gap-3">
                   <span className="tnum text-ink-faint w-5 shrink-0 text-right text-[11px]">
@@ -464,9 +616,9 @@ export function ChainTable({
                     logoUrl={chain.logoUrl}
                     brandColor={chain.brandColor}
                   />
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="truncate text-[13.5px] font-medium">
+                      <span className="truncate text-[14px] font-medium">
                         {chain.name}
                       </span>
                       {chain.valueTrapRisk && (
@@ -485,30 +637,103 @@ export function ChainTable({
                           {chain.symbol}
                         </span>
                       )}
-                      {/* The grade is a word the Fundamentals column already
-                          gives as a number two cells to the right; here it only
-                          made the badge wider than the column. */}
                       <TierBadge tier={chain.tier} compact />
                     </div>
                   </div>
+                  <div className="shrink-0 text-right">
+                    <div
+                      className="tnum text-[20px] leading-none font-semibold tracking-tight"
+                      style={{
+                        color:
+                          gap === null
+                            ? "var(--color-ink-faint)"
+                            : divergingHue(gap),
+                      }}
+                    >
+                      {gap === null ? "—" : formatSigned(gap)}
+                    </div>
+                    <div className="text-ink-faint mt-1 text-[9.5px] tracking-wide uppercase">
+                      value gap
+                    </div>
+                  </div>
                 </div>
-              </th>
 
-              {columns.map((column) => (
-                <td
-                  key={column.key}
-                  className={cn(
-                    "px-3 py-2.5 align-middle last:pr-6",
-                    column.align === "right" ? "text-right" : "text-left",
-                  )}
-                >
-                  {column.render(chain, { median: feeMultipleMedian })}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                <dl className="mt-3 grid grid-cols-3 gap-x-3 gap-y-2 pl-8">
+                  <MobileStat
+                    label="Fundamentals"
+                    value={scoreText(chain.scores.fundamental)}
+                  />
+                  <MobileStat
+                    label="Momentum"
+                    value={scoreText(chain.scores.momentum)}
+                  />
+                  <MobileStat
+                    label="Cheapness"
+                    value={scoreText(chain.scores.cheapness)}
+                  />
+                  <MobileStat
+                    label="Market cap"
+                    value={formatUsd(chain.metrics.marketCap)}
+                  />
+                  <MobileStat
+                    label="TVL"
+                    value={formatUsd(chain.metrics.tvl)}
+                  />
+                  <MobileStat
+                    label="Fees 30d"
+                    value={formatUsd(chain.metrics.fees30d)}
+                    delta={chain.metrics.feesChange30d}
+                  />
+                </dl>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+      {!showAll && rows.length > MOBILE_PAGE && (
+        <div className="border-hairline border-t p-3">
+          <button
+            type="button"
+            onClick={() => setShowAll(true)}
+            className="border-hairline text-ink-secondary hover:text-ink rounded-control min-h-10 w-full border text-[12.5px] font-medium"
+          >
+            Show all {rows.length} chains
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Cards shown before the phone list asks whether to show the rest. */
+const MOBILE_PAGE = 20;
+
+/** A 0–100 score as text, or a dash where the model has none. */
+const scoreText = (value: number | null) =>
+  value === null ? "—" : Math.round(value).toString();
+
+function MobileStat({
+  label,
+  value,
+  delta,
+}: {
+  label: string;
+  value: string;
+  delta?: number | null;
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-ink-faint truncate text-[9.5px] tracking-wide uppercase">
+        {label}
+      </dt>
+      <dd className="tnum text-ink-secondary mt-0.5 flex items-baseline gap-1.5 text-[12.5px]">
+        <span className={value === "—" ? "text-ink-faint" : undefined}>
+          {value}
+        </span>
+        {delta !== undefined && delta !== null && (
+          <Delta value={delta} digits={0} />
+        )}
+      </dd>
     </div>
   );
 }

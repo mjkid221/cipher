@@ -33,7 +33,9 @@ export interface AlphaRegression {
 }
 
 const MARGIN = { top: 18, right: 22, bottom: 44, left: 62 };
+/** Chart height; narrow screens get a shorter plot so the page stays scannable. */
 const HEIGHT = 430;
+const HEIGHT_NARROW = 320;
 /** Pointer distance, in px, within which a point is considered hovered. */
 const HOVER_RADIUS = 44;
 
@@ -59,6 +61,7 @@ export function AlphaMap({
   className?: string;
 }) {
   const { ref, width } = useMeasure<HTMLDivElement>();
+  const height = width > 0 && width < 480 ? HEIGHT_NARROW : HEIGHT;
   const [hovered, setHovered] = useState<string | null>(null);
   const router = useRouter();
 
@@ -74,7 +77,7 @@ export function AlphaMap({
   const clipId = useId().replace(/[^a-zA-Z0-9-]/g, "");
 
   const plotWidth = Math.max(320, width) - MARGIN.left - MARGIN.right;
-  const plotHeight = HEIGHT - MARGIN.top - MARGIN.bottom;
+  const plotHeight = height - MARGIN.top - MARGIN.bottom;
 
   const model = useMemo(() => {
     const usable = points.filter(
@@ -177,7 +180,7 @@ export function AlphaMap({
       {width > 0 && model && (
         <svg
           width={width}
-          height={HEIGHT}
+          height={height}
           role="img"
           aria-label="Market capitalisation plotted against economic scale, with the peer trend line. The ranked table below carries the same values."
         >

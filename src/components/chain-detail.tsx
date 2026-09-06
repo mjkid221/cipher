@@ -523,7 +523,7 @@ export function ChainDetail({ slug }: { slug: string }) {
                         <Delta value={row.delta(chain)} digits={0} />
                       )}
                     </td>
-                    <td className="w-[120px] px-5 py-3">
+                    <td className="w-[120px] px-3 py-3 sm:px-5">
                       <PercentileBar
                         value={chain.percentiles[row.key] ?? null}
                         label={`${row.label} percentile`}

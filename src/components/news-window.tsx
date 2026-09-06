@@ -245,7 +245,7 @@ function Chip({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "shrink-0 rounded-full border px-2.5 py-1 text-[11.5px] whitespace-nowrap transition-colors",
+        "shrink-0 rounded-full border px-2.5 py-1 text-[11.5px] whitespace-nowrap transition-colors max-sm:py-1.5",
         active
           ? "text-ink border-[color-mix(in_oklab,var(--color-series-2)_45%,transparent)] bg-[color-mix(in_oklab,var(--color-series-2)_14%,transparent)]"
           : "border-hairline text-ink-muted hover:text-ink-secondary",

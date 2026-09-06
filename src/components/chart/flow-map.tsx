@@ -93,6 +93,10 @@ export function FlowMap({
   className?: string;
 }) {
   const { ref, width } = useMeasure<HTMLDivElement>();
+  // Chain names live in the side gutters; on a phone 104px each side left
+  // 180px for the ribbons, so the gutters shrink with the width.
+  const narrow = width > 0 && width < 480;
+  const gutter = narrow ? 88 : MARGIN.left;
   const [hover, setHover] = useState<Hover | null>(null);
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
 
@@ -145,7 +149,7 @@ export function FlowMap({
       Math.min(240, nodeCount * 6),
   );
 
-  const plotWidth = Math.max(280, width) - MARGIN.left - MARGIN.right;
+  const plotWidth = Math.max(280, width) - gutter - gutter;
   const plotHeight = svgHeight - MARGIN.top - MARGIN.bottom;
 
   const model = useMemo(() => {
@@ -190,8 +194,8 @@ export function FlowMap({
     const sourceOffset = new Map<string, number>();
     const targetOffset = new Map<string, number>();
 
-    const leftX = MARGIN.left;
-    const rightX = MARGIN.left + plotWidth - NODE_WIDTH;
+    const leftX = gutter;
+    const rightX = gutter + plotWidth - NODE_WIDTH;
 
     const ribbons = top.map((corridor, index) => {
       const source = sources.nodes.get(corridor.from)!;
@@ -228,7 +232,7 @@ export function FlowMap({
     });
 
     return { sources, targets, ribbons, leftX, rightX };
-  }, [top, plotWidth, plotHeight]);
+  }, [top, plotWidth, plotHeight, gutter]);
 
   if (top.length === 0) {
     return (
@@ -368,7 +372,9 @@ export function FlowMap({
                             ? "var(--color-ink-secondary)"
                             : "var(--color-ink-muted)"
                       }
-                      fontSize={node.height >= LABEL_FULL_HEIGHT ? 11 : 9.5}
+                      fontSize={
+                        node.height >= LABEL_FULL_HEIGHT && !narrow ? 11 : 9.5
+                      }
                     >
                       {node.name}
                     </text>

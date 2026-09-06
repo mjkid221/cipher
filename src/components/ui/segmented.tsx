@@ -186,8 +186,8 @@ export function Segmented<T extends string>({
               className={cn(
                 "relative rounded-full font-medium whitespace-nowrap transition-colors",
                 size === "compact"
-                  ? "px-2.5 py-1 text-[11.5px]"
-                  : "px-3.5 py-1.5 text-[12.5px]",
+                  ? "px-2.5 py-1 text-[11.5px] max-sm:py-1.5"
+                  : "px-3.5 py-1.5 text-[12.5px] max-sm:py-2",
                 active ? "text-ink" : "text-ink-muted hover:text-ink-secondary",
               )}
               style={{ transitionDuration: "var(--dur-micro)" }}
