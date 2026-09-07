@@ -21,16 +21,16 @@ Three scores are built independently, then combined.
 
 **Fundamentals** — how large the chain's real economy is.
 
-| Input | Weight |
-|---|---|
-| Chain fees, 30d | 20% |
-| Stablecoin float | 18% |
-| Total value locked | 17% |
-| Chain revenue, 30d | 12% |
-| DEX volume, 30d | 12% |
-| Real-world assets | 11% |
-| Bridged volume, 30d | 6% |
-| Protocols deployed | 4% |
+| Input               | Weight |
+| ------------------- | ------ |
+| Chain fees, 30d     | 20%    |
+| Stablecoin float    | 18%    |
+| Total value locked  | 17%    |
+| Chain revenue, 30d  | 12%    |
+| DEX volume, 30d     | 12%    |
+| Real-world assets   | 11%    |
+| Bridged volume, 30d | 6%     |
+| Protocols deployed  | 4%     |
 
 **Momentum** — whether that economy is growing or decaying. 30-day fee growth
 (27%), stablecoin growth (22%), TVL growth (20%), DEX volume growth (16%),
@@ -74,7 +74,7 @@ a size gate, because a $2M-TVL chain can post a spectacular multiple purely
 because its denominator is noise. The screen defaults to hiding anything below
 35%.
 
-Only metrics whose absence is a genuine *data gap* count toward coverage.
+Only metrics whose absence is a genuine _data gap_ count toward coverage.
 Real-world assets, bridged volume and Mayan routing are all excluded: the first
 two come from complete global scans, so a chain missing from them holds a real
 zero, and the third reaches about a dozen chains by design. Counting any of them
@@ -97,6 +97,7 @@ rather than dressed up as a price target.
 ## Where the data comes from
 
 ### DefiLlama — capital, revenue, real-world assets and bridge flow
+
 Free, unauthenticated. TVL and 90-day TVL history, stablecoin float, DEX volume,
 bridged volume, tokenised real-world assets, protocol counts, market caps and
 30-day price history.
@@ -127,6 +128,7 @@ Two things worth knowing about how this adapter reads DefiLlama:
   sources do not double count.
 
 ### Artemis — the chain universe, and cross-chain capital flow
+
 **No API key needed.** Two open endpoint families do the work.
 
 The asset directory behind [artemis.ai/sectors/chains](https://www.artemis.ai/sectors/chains)
@@ -140,7 +142,7 @@ The flow data behind [artemis.ai/sectors/flows](https://www.artemis.ai/sectors/f
 gives inflow, outflow and net figures in USD across **35 chains** — the broadest
 flow source available, and nearly three times Mayan's reach. Passing no
 `sourceChains` filter returns every chain Artemis tracks; naming a subset instead
-restricts the aggregation to flows *between* those chains, which quietly
+restricts the aggregation to flows _between_ those chains, which quietly
 understates every one of them, so the filter is omitted.
 
 Its `/articles/` feed is open too, and supplies the research window. Two limits
@@ -155,6 +157,7 @@ addresses and transactions, which were dropped from the model as vanity metrics,
 and the API key requirement went with them.
 
 ### CoinGecko — market attention, and dilution
+
 Free, unauthenticated, **one request for every chain**. Shown, never scored.
 
 This exists because the obvious social sources do not work. X's API starts around
@@ -165,13 +168,35 @@ it is unusable. The markets endpoint takes every id at once and carries three
 things worth having.
 
 **Fully diluted valuation is the reason this earns its place.** Every ratio in
-the model divides *circulating* market cap, which quietly flatters any chain with
+the model divides _circulating_ market cap, which quietly flatters any chain with
 a large unlock ahead: Hyperliquid trades at **4.3×** its circulating cap. The
 overhang is now shown wherever a chain is called cheap, and the thesis says so
 in words. Alongside it: 24h trading volume, the honest version of "attention",
 and distance from the all-time high.
 
+### Comparing two chains
+
+A **Compare** window answers the marketcapof.com question — what one chain's
+token would cost at another chain's market cap — plus how far each sits below
+its own all-time high, on either a circulating or a fully diluted basis. Every
+chain page links into it with the chain already loaded.
+
+The arithmetic is `own price × other market cap ÷ own market cap`, written that
+way on purpose: both factors come from DefiLlama, so the ratio is exact rather
+than mixing sources. CoinGecko supply enters only where nothing else can supply
+it — the market cap a past high implies — and that figure is **an
+approximation, stated as one on screen**: it multiplies the old price by
+_today's_ supply, because no free source publishes the supply on the day of the
+high, so for a chain that has been unlocking since, it overstates what the
+market actually paid.
+
+Two other honest labels: "fully diluted" here means price × **total** supply,
+which is what CoinGecko's figure counts and is not a hard cap (Bitcoin's implies
+20.08M, not 21M); and the whole window is a hypothetical, not a target — nothing
+in it feeds the ranking.
+
 ### Cross-chain flow — one dataset
+
 There is one flow view, combined from four public sources with each dollar
 counted once, and the selected chain shows what each source contributed.
 
@@ -180,7 +205,7 @@ once.** Artemis is the backbone — Across, USDT0, the canonical bridges and its
 partial attribution of Wormhole and deBridge, across 43 chains. Mayan's corridor
 matrix is added in full: Artemis does not carry it (on Monad, Mayan reports $83M
 of inflow in a month where Artemis sees $25M in total). Wormhole and deBridge
-contribute only the *excess* over what Artemis already attributes to them, per
+contribute only the _excess_ over what Artemis already attributes to them, per
 chain and per direction, and each of their routes is scaled by the same share so
 the ribbons sum to the totals they sit beneath.
 
@@ -206,10 +231,11 @@ Artemis appeared to see 42% of volume the combined set missed; afterwards, 7.5%.
 **DefiLlama's own bridge data is not available.** `defillama.com/bridges/chains`
 runs on their `inflows` endpoint, which returns 402 and asks for a subscription,
 as does every path under `bridges.llama.fi`. Their free `chain-assets` endpoint
-does work and gives bridged assets *held* per chain, but that is a stock rather
+does work and gives bridged assets _held_ per chain, but that is a stock rather
 than a flow and answers a different question.
 
 ### Layer — L1 or L2
+
 Two registries, because neither is sufficient alone.
 
 CoinGecko's `layer-1` and `layer-2` categories are two bulk requests and cover
@@ -225,6 +251,7 @@ failure: appchains, sidechains and validiums genuinely fit neither label, and
 guessing would be worse than admitting it.
 
 ### News — one search per chain
+
 No free crypto news API exists: CoinGecko's is Pro-only, CryptoPanic wants a key.
 Google News publishes any search as RSS without one, which is what makes
 per-chain coverage possible. Roughly 1,300 articles across 44 chains.
@@ -270,10 +297,10 @@ pnpm dev
 
 ### Environment
 
-| Variable | Required | Effect |
-|---|---|---|
-| `UPSTASH_REDIS_REST_URL` | no | Shares the cache across instances and deploys |
-| `UPSTASH_REDIS_REST_TOKEN` | no | — |
+| Variable                   | Required | Effect                                        |
+| -------------------------- | -------- | --------------------------------------------- |
+| `UPSTASH_REDIS_REST_URL`   | no       | Shares the cache across instances and deploys |
+| `UPSTASH_REDIS_REST_TOKEN` | no       | —                                             |
 
 Those are the only two, and both are optional. Every data source this app reads
 is open and unauthenticated.
@@ -301,7 +328,7 @@ refresh runs behind the reader. Concurrent callers for the same key share one
 in-flight load, so a cold cache under load produces one upstream request rather
 than one per reader.
 
-Only *derived* values are cached. The chain directory is a 5MB payload and the
+Only _derived_ values are cached. The chain directory is a 5MB payload and the
 protocol list is 7MB; both are projected down to small objects before anything is
 written, which keeps every entry well inside Upstash's per-value limit.
 
@@ -454,13 +481,13 @@ season index counted; and the rainbow chart. **None of it feeds the model**:
 
 Everything comes from free, keyless endpoints:
 
-| Data | Source |
-|---|---|
-| Daily Bitcoin price since 2010 | CoinMetrics community API (drives the rainbow fit) |
-| Fear & Greed, daily since February 2018 | alternative.me |
-| The top 100 by market cap, with circulating supply | CoinGecko |
+| Data                                                                     | Source                                                                    |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| Daily Bitcoin price since 2010                                           | CoinMetrics community API (drives the rainbow fit)                        |
+| Fear & Greed, daily since February 2018                                  | alternative.me                                                            |
+| The top 100 by market cap, with circulating supply                       | CoinGecko                                                                 |
 | Prices for those 100 coins — daily for 15 months, weekly since late 2017 | DefiLlama coins API (the altcoin season index and the altcoin market cap) |
-| Block height | mempool.space, blockstream.info |
+| Block height                                                             | mempool.space, blockstream.info                                           |
 
 Honest labels: the **altcoin season index is CoinMarketCap's 90-day definition**
 computed on real history, with the number of coins compared shown beside it;

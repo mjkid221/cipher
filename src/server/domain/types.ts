@@ -47,6 +47,24 @@ export interface ChainMetrics {
   tradingVolume24h: number | null;
   fromAllTimeHigh: number | null;
 
+  /**
+   * Supply and the all-time high, from CoinGecko. Also shown, never scored.
+   *
+   * `circulatingSupply` is what market cap counts; `totalSupply` is what
+   * CoinGecko's `fdv` counts, which is *not* the max supply (measured
+   * September 2026 — see the adapter docblock); `maxSupply` is the hard cap and
+   * is null for the many tokens that have none.
+   *
+   * `athPrice` is a price, unlike `fromAllTimeHigh` which is the percent below
+   * it. A market cap at that high can only be approximated, because the supply
+   * on the day is not published here — anything derived from it must say so.
+   */
+  circulatingSupply: number | null;
+  totalSupply: number | null;
+  maxSupply: number | null;
+  athPrice: number | null;
+  athDate: string | null;
+
   tvl: number | null;
   tvlChange7d: number | null;
   tvlChange30d: number | null;
