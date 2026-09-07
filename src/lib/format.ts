@@ -38,6 +38,34 @@ export function formatUsdAxis(value: number): string {
   return `$${abs.toFixed(0)}`;
 }
 
+/**
+ * A token price, written out in full.
+ *
+ * `formatUsd` abbreviates above $1,000, which is right for a market cap and
+ * wrong for a price: Bitcoin would read "$80K" where the figure a reader wants
+ * is "$79,696.42". Sub-dollar tokens get four significant digits, so a price of
+ * $0.0000212 does not collapse to "$0.00".
+ */
+export function formatPrice(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value))
+    return "—";
+
+  const abs = Math.abs(value);
+  const sign = value < 0 ? MINUS : "";
+
+  if (abs >= 1) {
+    return `${sign}$${abs.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  }
+  // toPrecision keeps four significant digits wherever the leading zeros end;
+  // Number() then strips the exponent form toPrecision reaches for below 1e-7.
+  return `${sign}$${Number(abs.toPrecision(4)).toFixed(
+    Math.max(2, 4 - Math.floor(Math.log10(abs)) - 1),
+  )}`;
+}
+
 export function formatCount(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value))
     return "—";
@@ -66,6 +94,9 @@ export function formatMultiple(value: number | null | undefined): string {
   if (value >= 10_000) return `${(value / 1000).toFixed(1)}k×`;
   if (value >= 100) return `${value.toFixed(0)}×`;
   if (value >= 10) return `${value.toFixed(1)}×`;
+  // Two decimals would print "0.00×" for a small chain measured against a
+  // giant one, which reads as zero rather than as a small number.
+  if (value < 0.1 && value > 0) return `${Number(value.toPrecision(2))}×`;
   return `${value.toFixed(2)}×`;
 }
 

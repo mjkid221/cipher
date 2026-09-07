@@ -8,12 +8,12 @@ README explains the product and the model to humans.
 
 ## Commands
 
-| Task | Command |
-|---|---|
-| Dev server (always port 3001; 3000 is taken on this machine) | `pnpm dev` |
-| Type check / lint / production build | `pnpm typecheck`, `pnpm lint`, `pnpm build` |
-| Format (write / check) | `pnpm format:write`, `pnpm format:check` |
-| Dead code, unused deps and exports | `pnpm knip` (config in `knip.json`; mark intentional exports `@public`) |
+| Task                                                         | Command                                                                 |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| Dev server (always port 3001; 3000 is taken on this machine) | `pnpm dev`                                                              |
+| Type check / lint / production build                         | `pnpm typecheck`, `pnpm lint`, `pnpm build`                             |
+| Format (write / check)                                       | `pnpm format:write`, `pnpm format:check`                                |
+| Dead code, unused deps and exports                           | `pnpm knip` (config in `knip.json`; mark intentional exports `@public`) |
 
 CI (`.github/workflows/ci.yml`) runs `format:check`, `typecheck`, `lint` and
 `knip` on every push to `main` and every pull request; run the same four
@@ -37,8 +37,9 @@ src/server/sources/      one adapter per upstream: defillama, artemis, mayan, co
                          alternative-me, mempool, l2beat, news (Google News RSS), bridges/{wormhole,debridge}
 src/server/cache/        cachedValue(key, {ttlSeconds, staleSeconds}, loader): L1 map + Upstash Redis,
                          stale-while-revalidate, refreshes kept alive with waitUntil
-src/server/api/routers/  chains (list, detail, meta, news, methodology), market (brief, cycle, detail)
-src/components/          screen.tsx (home), chain-detail.tsx, table/, chart/, market/, window/, ui/
+src/server/api/routers/  chains (list, detail, meta, news, methodology, compare), market (brief, cycle, detail)
+src/components/          screen.tsx (home), chain-detail.tsx, compare-window.tsx, table/, chart/,
+                         market/, window/, ui/
 src/lib/                 palette (tiers, rainbow, zone strokes), glossary, format, cycle-models, market-zones
 src/stores/              zustand filters store (persisted; version-bump + migrate on shape changes)
 ```
@@ -70,13 +71,16 @@ src/stores/              zustand filters store (persisted; version-bump + migrat
 6. **Dataviz discipline.** One y-axis per chart (aligned strips with a shared
    crosshair, or colour, never dual axes). Diverging blue = cheap/undervalued,
    red = expensive/overvalued, reserved for that meaning. Categorical trio for
-   identity only. Status colours only with a glyph or label. Every colour
+   identity only — and note `--color-series-1` _is_ `--color-under`, so pairing
+   it with series-2's warm orange reads as a value judgement; the compare window
+   uses series-1 and series-3 for that reason. Status colours only with a glyph or label. Every colour
    encoding has a named legend. The rainbow chart is the one deliberate
    multi-hue ramp, and every band is named twice.
 7. **Windows are outside `HydrateClient`.** A `useQuery` there for a key the
    page prefetched makes TanStack defer hydration and causes an SSR mismatch.
    Windows read prefetched data through their own queries only when those keys
-   are never prefetched (market.cycle, market.detail) or via the detail payload.
+   are never prefetched (market.cycle, market.detail, chains.compare) or via
+   the detail payload.
 8. **Config changes that change data shape bump a cache key** (the snapshot key
    carries the universe cap) and, for the persisted store, the version with a
    `migrate`.
@@ -99,6 +103,15 @@ src/stores/              zustand filters store (persisted; version-bump + migrat
   Ranks 56–85 are as well covered as the top 55; coverage breaks below ~$8M TVL.
 - Vercel Hobby: crons once per day at most (more frequent schedules fail the
   deploy), functions up to 300 s, `waitUntil` work counts toward it.
+- CoinGecko `/coins/markets` carries supply, the all-time high and its date in
+  the same response the app already fetches, so those cost no extra request. Its
+  `fully_diluted_valuation` is price × **total** supply, not max supply (measured
+  6 September 2026: Bitcoin implies 20.08M against a 21M max). Anything labelled
+  "fully diluted" must therefore say total supply.
+- Social metrics: X's API is paid, `syndication.twitter.com` answers 429 on the
+  first request, CoinGecko's free `community_data` is null and keyless GitHub
+  allows 60 requests an hour. CoinPaprika `/v1/coins/{id}` carries follower,
+  subscriber and repository counts keylessly at 20,000 requests a month.
 
 ## Verification
 

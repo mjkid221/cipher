@@ -185,6 +185,33 @@ export const GLOSSARY = {
       "Bitcoin sits near 1.0. Hyperliquid is above 4, so its circulating cap describes a fraction of the eventual supply.",
   },
 
+  capComparison: {
+    title: "Price at another chain's market cap",
+    short:
+      "What one chain's token would cost if its valuation matched another chain's, holding its supply fixed.",
+    long: "A way of putting two chains on the same scale. If a chain is priced at a tenth of another's market cap, then matching that valuation would mean a ten-times price — which is arithmetic, not a forecast.\n\nIt says nothing about whether either chain deserves its valuation. That question is what the rest of this screen is for: a chain can be a hundred times smaller than another and still be the expensive one on its own fundamentals.",
+    formula:
+      "own price × other market cap ÷ own market cap. On the fully diluted basis, both sides use fully diluted values instead.",
+    example:
+      "A chain worth $3B whose token trades at $0.80, measured against a $300B chain, gives 100× and $80 — before asking whether $300B was ever a sensible valuation.",
+  },
+
+  capBasis: {
+    title: "Circulating or fully diluted",
+    short:
+      "Whether a comparison uses the tokens in circulation today, or every token that will exist.",
+    long: "Circulating market cap is price × circulating supply: what the market values right now, and what every ratio in the ranking uses. Fully diluted is price × *total* supply — every token that exists, including those still locked.\n\nThe two differ most for young chains with long unlock schedules, which is exactly where a comparison on circulating supply alone flatters. Note that fully diluted here follows CoinGecko and counts total supply, not a hard maximum, so a token with an uncapped supply has no fully diluted figure to show.",
+  },
+
+  allTimeHigh: {
+    title: "Distance to the all-time high",
+    short:
+      "What the price must be multiplied by to reclaim its highest recorded level, and the market cap that level implies.",
+    long: "The high itself is a fact about the past, and reaching it again is not a prediction — it is a yardstick for how much of a drawdown a chain is carrying.\n\nThe market cap at that high is an approximation, and an optimistic one. It multiplies the old price by *today's* supply, because no free source publishes the supply on the day of the high. For a chain that has been unlocking tokens ever since, the real market cap at the high was smaller than the figure shown.",
+    formula:
+      "multiple = all-time-high price ÷ current price. Implied cap = all-time-high price × today's supply.",
+  },
+
   attention: {
     title: "Market attention",
     short:

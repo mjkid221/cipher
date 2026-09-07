@@ -150,6 +150,48 @@ export const chainsRouter = createTRPCRouter({
   /** Run metadata on its own, for the header freshness indicator. */
   meta: publicProcedure.query(async () => (await getSnapshot()).meta),
 
+  /**
+   * The comparison window's dataset: one compact row per priceable chain.
+   *
+   * **Never prefetch this on the server.** The windows are mounted in the root
+   * layout, outside the page's `HydrateClient`, so a query here for a key the
+   * page prefetched makes TanStack defer hydration and desynchronises the first
+   * render. `market.cycle` and `market.detail` exist for the same reason.
+   *
+   * A chain with no token cannot sit on either side of a market-cap comparison,
+   * so the rows are filtered to those with both a price and a market cap. That
+   * is also what keeps the payload small enough to fetch on open: about sixty
+   * rows, a few kilobytes gzipped.
+   */
+  compare: publicProcedure.query(async () => {
+    const { chains, meta } = await getSnapshot();
+
+    return {
+      generatedAt: meta.generatedAt,
+      chains: chains
+        .filter(
+          (chain) =>
+            chain.metrics.price !== null && chain.metrics.marketCap !== null,
+        )
+        .sort((a, b) => (b.metrics.marketCap ?? 0) - (a.metrics.marketCap ?? 0))
+        .map((chain) => ({
+          slug: chain.slug,
+          name: chain.name,
+          symbol: chain.symbol,
+          logoUrl: chain.logoUrl,
+          brandColor: chain.brandColor,
+          price: chain.metrics.price!,
+          marketCap: chain.metrics.marketCap!,
+          fdv: chain.metrics.fdv,
+          circulatingSupply: chain.metrics.circulatingSupply,
+          totalSupply: chain.metrics.totalSupply,
+          athPrice: chain.metrics.athPrice,
+          athDate: chain.metrics.athDate,
+          fromAllTimeHigh: chain.metrics.fromAllTimeHigh,
+        })),
+    };
+  }),
+
   /** The model's weights, so the methodology panel cannot drift from the code. */
   methodology: publicProcedure.query(() => ({
     fundamental: FUNDAMENTAL_WEIGHTS,

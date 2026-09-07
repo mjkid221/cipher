@@ -2,7 +2,12 @@
 
 import { fundamentalsGrade } from "~/lib/grade";
 import Link from "next/link";
-import { ArrowLeft, ArrowUpRight, TriangleAlert } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowLeftRight,
+  ArrowUpRight,
+  TriangleAlert,
+} from "lucide-react";
 import { useMemo } from "react";
 
 import { AlphaMap, type AlphaPoint } from "~/components/chart/alpha-map";
@@ -13,6 +18,7 @@ import { PercentileBar, RatioMeter } from "~/components/chart/bars";
 import { FlowMap } from "~/components/chart/flow-map";
 import { PageHeader } from "~/components/header";
 import { SiteFooter } from "~/components/site-footer";
+import { useWindows } from "~/components/window/window-context";
 import { Explain } from "~/components/ui/explain";
 import {
   ChainAvatar,
@@ -143,6 +149,9 @@ const METRIC_ROWS: {
 
 export function ChainDetail({ slug }: { slug: string }) {
   const query = api.chains.detail.useQuery({ slug }, { staleTime: 60_000 });
+  // The comparison window lives in the root layout, so this page can seed it
+  // with the chain being read rather than making the reader pick it again.
+  const { openCompare } = useWindows();
 
   /** Every rated peer's score, for the value scale beside this chain's figure. */
   const peerScores = useMemo(
@@ -566,6 +575,18 @@ export function ChainDetail({ slug }: { slug: string }) {
               </span>
             }
             subtitle="What is still to be issued, and where capital is moving."
+            actions={
+              chain.investable ? (
+                <button
+                  type="button"
+                  onClick={() => openCompare(chain.slug)}
+                  className="border-hairline text-ink-secondary hover:text-ink hover:bg-raised rounded-control inline-flex min-h-8 items-center gap-1.5 border px-2.5 text-[11.5px] transition-colors"
+                >
+                  <ArrowLeftRight className="size-3" aria-hidden />
+                  Compare with…
+                </button>
+              ) : undefined
+            }
           >
             {(chain.metrics.dilutionOverhang !== null ||
               chain.metrics.fromAllTimeHigh !== null) && (

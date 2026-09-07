@@ -13,12 +13,20 @@ import type { TopMarketRow } from "~/server/domain/market-types";
  * after **four** sequential calls, against the forty-odd this app needs — so
  * that route is not merely slow, it is unusable.
  *
- * The markets endpoint takes every id at once, needs no key, and carries three
- * things worth having:
+ * The markets endpoint takes every id at once, needs no key, and carries
+ * everything below in that one response, at no extra request cost:
  *
  *   • 24h trading volume — liquidity, which is the honest version of "attention"
- *   • distance from the all-time high — a sentiment proxy that costs nothing
+ *   • distance from the all-time high, plus the high itself and its date
+ *   • circulating, total and max supply
  *   • fully diluted valuation — see below
+ *
+ * **FDV here is price × total supply, not max supply.** Measured 6 September
+ * 2026 across five coins: `fully_diluted_valuation / current_price` came back
+ * as 20.08M for Bitcoin (its total, against a 21M max) and 955M for Hyperliquid
+ * (its total, against a 1B max); Sui's total and max coincide. So anything
+ * labelled "fully diluted" in this app means total supply, and the interface
+ * says so rather than implying a hard cap.
  *
  * FDV is the reason this adapter earns its place. The model values chains on
  * *circulating* market cap, which quietly flatters any chain with a large unlock
@@ -78,7 +86,7 @@ export function fetchChainLayers() {
 }
 
 export interface MarketAttention {
-  /** Fully diluted valuation, USD. */
+  /** Fully diluted valuation, USD. Price × total supply; see the file docblock. */
   fdv: number | null;
   /** 24h spot trading volume across exchanges, USD. */
   tradingVolume24h: number | null;
@@ -86,6 +94,15 @@ export interface MarketAttention {
   fromAllTimeHigh: number | null;
   /** CoinGecko's own market-cap rank. */
   marketCapRank: number | null;
+  /** Tokens in circulation — what market cap counts. */
+  circulatingSupply: number | null;
+  /** Every token that exists — what `fdv` counts. */
+  totalSupply: number | null;
+  /** The hard cap, where there is one. Null for Ethereum, Solana and most others. */
+  maxSupply: number | null;
+  /** Highest price ever recorded, USD, and the day it happened. */
+  athPrice: number | null;
+  athDate: string | null;
 }
 
 interface RawMarket {
@@ -94,6 +111,11 @@ interface RawMarket {
   total_volume?: number | null;
   ath_change_percentage?: number | null;
   market_cap_rank?: number | null;
+  circulating_supply?: number | null;
+  total_supply?: number | null;
+  max_supply?: number | null;
+  ath?: number | null;
+  ath_date?: string | null;
 }
 
 const chunk = <T>(items: readonly T[], size: number): T[][] => {
@@ -107,7 +129,10 @@ export function fetchMarketAttention(geckoIds: readonly string[]) {
   const ids = [...new Set(geckoIds.filter(Boolean))].sort();
 
   return cachedValue(
-    `coingecko:attention:${ids.length}`,
+    // The key carries a version because it is otherwise shape-blind: it counts
+    // ids and nothing else, so widening the projection without a bump would
+    // serve the older, narrower payload from Redis for the whole stale window.
+    `coingecko:attention:v2:${ids.length}`,
     // Long TTL on purpose. The free tier rate-limits aggressively and none of
     // this moves fast enough to justify pressing it.
     { ttlSeconds: 1800, staleSeconds: 21_600 },
@@ -139,6 +164,14 @@ export function fetchMarketAttention(geckoIds: readonly string[]) {
               tradingVolume24h: positive(row.total_volume),
               fromAllTimeHigh: numberOrNull(row.ath_change_percentage),
               marketCapRank: positive(row.market_cap_rank),
+              circulatingSupply: positive(row.circulating_supply),
+              totalSupply: positive(row.total_supply),
+              maxSupply: positive(row.max_supply),
+              athPrice: positive(row.ath),
+              athDate:
+                typeof row.ath_date === "string" && row.ath_date
+                  ? row.ath_date
+                  : null,
             };
           }
         } catch (error) {

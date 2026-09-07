@@ -7,6 +7,7 @@ import {
   ChevronDown,
   Command,
   Newspaper,
+  Scale,
   Waves,
 } from "lucide-react";
 import { useEffect, useId, useState } from "react";
@@ -78,6 +79,7 @@ export function PageHeader({
           <MarketButton />
           <FlowsButton />
           <NewsButton />
+          <CompareButton />
 
           <span
             className="bg-hairline mx-1 hidden h-4 w-px lg:block"
@@ -202,6 +204,19 @@ function Mark() {
  * because the header is sticky: the panel stays one click away from anywhere on
  * the ranking, instead of being buried below a table nobody scrolls past.
  */
+/** Opens the market-cap comparison. */
+function CompareButton() {
+  const { compare, toggleCompare } = useWindows();
+  return (
+    <WindowButton
+      label="Compare"
+      icon={<Scale className="size-3.5" aria-hidden />}
+      active={compare !== "closed"}
+      onClick={toggleCompare}
+    />
+  );
+}
+
 function FlowsButton() {
   const { flows, toggleFlows } = useWindows();
   return (

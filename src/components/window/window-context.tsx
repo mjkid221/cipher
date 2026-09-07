@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 
+import { CompareWindow } from "~/components/compare-window";
 import { FlowsWindow } from "~/components/flows-window";
 import { MarketWindow } from "~/components/market/market-window";
 import type { MarketSection } from "~/components/market/sections";
@@ -32,6 +33,10 @@ interface WindowsApi {
   toggleMarket: () => void;
   /** Open (or restore) the Market window scrolled to one section. */
   openMarket: (section: MarketSection) => void;
+  compare: WindowState;
+  toggleCompare: () => void;
+  /** Open (or restore) the Compare window with one chain on the left. */
+  openCompare: (slug: string) => void;
 }
 
 const WindowsContext = createContext<WindowsApi | null>(null);
@@ -54,6 +59,9 @@ export function WindowsProvider({ children }: { children: React.ReactNode }) {
   // Incremented on every request so asking for the same section twice still
   // scrolls; a plain section value would not change and the effect not fire.
   const [marketRequest, setMarketRequest] = useState(0);
+  const [compare, setCompare] = useState<WindowState>("closed");
+  const [compareSeed, setCompareSeed] = useState<{ a: string } | null>(null);
+  const [compareRequest, setCompareRequest] = useState(0);
 
   // From the header each button is a toggle: closed opens it, minimised
   // restores it, and open puts it away again.
@@ -75,6 +83,16 @@ export function WindowsProvider({ children }: { children: React.ReactNode }) {
     setMarket("open");
   }, []);
 
+  const toggleCompare = useCallback(() => {
+    setCompare((current) => (current === "open" ? "closed" : "open"));
+  }, []);
+
+  const openCompare = useCallback((slug: string) => {
+    setCompareSeed({ a: slug });
+    setCompareRequest((n) => n + 1);
+    setCompare("open");
+  }, []);
+
   const value = useMemo(
     () => ({
       flows,
@@ -84,8 +102,22 @@ export function WindowsProvider({ children }: { children: React.ReactNode }) {
       market,
       toggleMarket,
       openMarket,
+      compare,
+      toggleCompare,
+      openCompare,
     }),
-    [flows, toggleFlows, news, toggleNews, market, toggleMarket, openMarket],
+    [
+      flows,
+      toggleFlows,
+      news,
+      toggleNews,
+      market,
+      toggleMarket,
+      openMarket,
+      compare,
+      toggleCompare,
+      openCompare,
+    ],
   );
 
   return (
@@ -113,6 +145,15 @@ export function WindowsProvider({ children }: { children: React.ReactNode }) {
         onClose={() => setMarket("closed")}
         section={marketSection}
         request={marketRequest}
+      />
+      <CompareWindow
+        open={compare !== "closed"}
+        minimized={compare === "minimized"}
+        onMinimize={() => setCompare("minimized")}
+        onRestore={() => setCompare("open")}
+        onClose={() => setCompare("closed")}
+        seed={compareSeed}
+        request={compareRequest}
       />
     </WindowsContext.Provider>
   );

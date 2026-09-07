@@ -74,7 +74,7 @@ const SERIES_DAYS = 90;
 
 // The cap is part of the key: a change of universe must not be served from a
 // day-old snapshot of a different shape while the rebuild runs behind it.
-const SNAPSHOT_KEY = `snapshot:cap${UNIVERSE_CAP}`;
+const SNAPSHOT_KEY = `snapshot:v2:cap${UNIVERSE_CAP}`;
 
 const slugify = (value: string) =>
   value
@@ -320,6 +320,11 @@ async function build(): Promise<AggregateResult> {
       dilutionOverhang: attn?.fdv && quote?.mcap ? attn.fdv / quote.mcap : null,
       tradingVolume24h: attn?.tradingVolume24h ?? null,
       fromAllTimeHigh: attn?.fromAllTimeHigh ?? null,
+      circulatingSupply: attn?.circulatingSupply ?? null,
+      totalSupply: attn?.totalSupply ?? null,
+      maxSupply: attn?.maxSupply ?? null,
+      athPrice: attn?.athPrice ?? null,
+      athDate: attn?.athDate ?? null,
 
       tvl: chain.llama.tvl ?? null,
       tvlChange7d: seriesChange(tvlSeries, 7),
@@ -484,7 +489,7 @@ async function build(): Promise<AggregateResult> {
         label: "CoinGecko",
         url: "https://www.coingecko.com/",
         status: Object.keys(attention).length ? "ok" : "unavailable",
-        note: "Fully diluted valuation, trading volume and distance from all-time high. Shown, not scored.",
+        note: "Fully diluted valuation, token supply, the all-time high and distance from it, and trading volume. Shown, not scored.",
       },
       {
         id: "defillama",
