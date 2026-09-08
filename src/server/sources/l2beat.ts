@@ -59,7 +59,7 @@ export function fetchRollupNames() {
           // L2Beat serves this from its own web app and rejects a bare client.
           headers: {
             "user-agent":
-              "Mozilla/5.0 (compatible; cipher/1.0; +valuation research dashboard)",
+              "Mozilla/5.0 (compatible; alfa/1.0; +valuation research dashboard)",
           },
         },
       );

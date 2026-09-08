@@ -1,6 +1,6 @@
-# Cipher — maintainer guide for coding agents
+# Alfa — maintainer guide for coding agents
 
-Cipher is a valuation screen for blockchains: it measures the gap between what
+Alfa is a valuation screen for blockchains: it measures the gap between what
 a chain earns and what it costs, ranks 85 chains by it, and surrounds the
 ranking with market context. Next.js 15 (App Router), tRPC 11, TanStack Query 5,
 Tailwind v4, zustand, TypeScript strict. This file is the operating manual; the
@@ -130,4 +130,6 @@ restart the dev server, and warm `/api/trpc/chains.meta` and
   explaining why, co-author trailer when an agent authored it.
 - Docblocks explain decisions and the evidence for them, including what was
   tried and removed. Keep them current when the decision changes.
-- Names rejected for this app: Assay, ChainFather, Par, Fathom, Caliper. It is Cipher.
+- Names rejected for this app: Assay, ChainFather, Par, Fathom, Caliper, Cipher.
+  It is Alfa — alpha, the excess return over a benchmark, which is the gap this
+  screen measures and what the alpha map plots.
