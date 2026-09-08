@@ -66,7 +66,7 @@ export async function fetchJson<T>(
         cache: "no-store",
         headers: {
           accept: "application/json",
-          "user-agent": "cipher/1.0 (+valuation research dashboard)",
+          "user-agent": "alfa/1.0 (+valuation research dashboard)",
           ...(body ? { "content-type": "application/json" } : {}),
           ...headers,
         },

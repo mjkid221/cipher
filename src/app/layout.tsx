@@ -9,13 +9,13 @@ import { TRPCReactProvider } from "~/trpc/react";
 
 export const metadata: Metadata = {
   title: {
-    default: "Cipher — what a chain earns against what it costs",
-    template: "%s — Cipher",
+    default: "Alfa — what a chain earns against what it costs",
+    template: "%s — Alfa",
   },
   description:
-    "Cipher measures the gap between what each major chain earns and what it costs, and ranks them by it. Built on DefiLlama, Artemis and Mayan.",
+    "Alfa measures the gap between what each major chain earns and what it costs — the alpha hiding in that gap — and ranks 85 chains by it. Built on DefiLlama, Artemis and Mayan.",
   openGraph: {
-    title: "Cipher — what a chain earns against what it costs",
+    title: "Alfa — what a chain earns against what it costs",
     description:
       "A valuation screen for blockchains: fundamentals versus what the market pays.",
     type: "website",

@@ -203,7 +203,7 @@ export function fetchHeadlines(
             headers: {
               accept: "application/rss+xml, application/xml, text/xml",
               "user-agent":
-                "Mozilla/5.0 (compatible; cipher/1.0; +valuation research dashboard)",
+                "Mozilla/5.0 (compatible; alfa/1.0; +valuation research dashboard)",
             },
           });
           if (!response.ok) return { chain, found: 0, items: [] };

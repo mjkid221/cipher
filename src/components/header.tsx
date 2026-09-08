@@ -54,10 +54,10 @@ export function PageHeader({
         <Link
           href="/"
           className="group flex items-center gap-2.5 rounded-full"
-          aria-label="Cipher — home"
+          aria-label="Alfa — home"
         >
           <Mark />
-          <span className="text-display text-[16px] leading-none">Cipher</span>
+          <span className="text-display text-[16px] leading-none">Alfa</span>
           <span
             className={cn(
               "text-ink-faint hidden overflow-hidden text-[12px] whitespace-nowrap transition-all lg:inline-block",
@@ -171,14 +171,14 @@ function Mark() {
       }}
       aria-hidden
     >
-      {/* The C of Cipher, closing on a single point. As icon.svg, without the ticks. */}
-      <svg viewBox="0 0 64 64" className="size-[86%]">
+      {/* The A of Alfa: a climb crossing its benchmark. Same drawing as icon.svg. */}
+      <svg viewBox="0 0 64 64" className="size-[82%]">
         <defs>
           <linearGradient
             id={gradientId}
-            x1="14"
+            x1="13.5"
             y1="12"
-            x2="50"
+            x2="50.5"
             y2="54"
             gradientUnits="userSpaceOnUse"
           >
@@ -187,13 +187,19 @@ function Mark() {
           </linearGradient>
         </defs>
         <path
-          d="M44.63 20.62 A17.0 17.0 0 1 0 44.63 43.38"
+          d="M13.5 50.0 L32.0 15.0 L50.5 50.0"
           fill="none"
           stroke={`url(#${gradientId})`}
-          strokeWidth="8.6"
+          strokeWidth="7.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M14.3 37.5 H49.7"
+          stroke="var(--color-ink)"
+          strokeWidth="4"
           strokeLinecap="round"
         />
-        <circle cx="48.00" cy="32" r="5" fill="var(--color-ink)" />
       </svg>
     </span>
   );

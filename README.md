@@ -1,4 +1,4 @@
-# Cipher
+# Alfa
 
 A valuation screen for blockchains. It answers one question:
 
