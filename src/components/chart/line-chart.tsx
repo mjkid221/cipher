@@ -253,6 +253,10 @@ export function LineChart({
     }
     for (const e of events) {
       if (e.placement === "bottom") continue;
+      // An empty label is a marker that wants its line and no text — a repeated
+      // event whose caption would say nothing new. It must not reserve a label
+      // row, or the top margin grows for blank space.
+      if (!e.label) continue;
       const ex = xOf(e.at);
       if (ex < 0 || ex > plotWidth) continue;
       const w = estimate(e.label);
@@ -570,9 +574,16 @@ export function LineChart({
               );
             })}
 
-            {model.topLabels.map((l) => (
+            {/*
+             * Keyed by position in the laid-out list, not by content: two
+             * events can carry the same label at the same pixel — a token
+             * schedule releasing the identical amount every month does exactly
+             * that — and a content key then collides. These are positional text
+             * nodes with no state, so the index is the honest key.
+             */}
+            {model.topLabels.map((l, index) => (
               <text
-                key={`${l.kind}-${l.text}-${l.x.toFixed(0)}`}
+                key={`${l.kind}-${index}`}
                 x={l.x}
                 y={-5 - l.row * LABEL_ROW}
                 textAnchor={l.anchor}
