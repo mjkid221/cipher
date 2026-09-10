@@ -11,6 +11,7 @@ import {
 import { useMemo } from "react";
 
 import { AlphaMap, type AlphaPoint } from "~/components/chart/alpha-map";
+import { ChainTokenomics } from "~/components/chain-tokenomics";
 import { OutletMark } from "~/components/news/outlet-mark";
 import { ParScale } from "~/components/chart/par-scale";
 import { AreaChart } from "~/components/chart/area-chart";
@@ -708,6 +709,12 @@ export function ChainDetail({ slug }: { slug: string }) {
             )}
           </Panel>
         </div>
+
+        <ChainTokenomics
+          slug={chain.slug}
+          symbol={chain.symbol}
+          investable={chain.investable}
+        />
 
         {chainCorridors.length > 0 && (
           <Panel

@@ -69,6 +69,24 @@ export function sequentialFill(percentile: number | null | undefined): string {
   return `color-mix(in oklab, var(--color-seq-400) ${strength.toFixed(1)}%, ${SURFACE})`;
 }
 
+/**
+ * Step `index` of `count` along the sequential ramp, darkest first.
+ *
+ * For a set of categories that has a genuine order — a token allocation
+ * running from insider-held to publicly distributed — where the categorical
+ * trio runs out at three and a multi-hue ramp would invent an ordering of its
+ * own. One hue, dark to light, so the order is the encoding.
+ *
+ * Past about six steps the lightness difference between neighbours drops below
+ * what a colour-blind reader can separate, so every caller labels each step
+ * directly as well: colour carries the order here, never the identity.
+ */
+export function sequentialStep(index: number, count: number): string {
+  if (count <= 1) return "var(--color-seq-400)";
+  const strength = 100 - clamp01(index / (count - 1)) * 72;
+  return `color-mix(in oklab, var(--color-seq-600) ${strength.toFixed(1)}%, ${SURFACE})`;
+}
+
 /** Status token for a growth rate. Always paired with a glyph or label. */
 export function deltaTone(value: number | null | undefined) {
   if (value === null || value === undefined || !Number.isFinite(value)) {

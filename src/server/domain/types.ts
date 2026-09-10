@@ -322,6 +322,132 @@ export interface NewsFeed {
   windowDays: number;
 }
 
+/**
+ * A token's unlock schedule and allocation, fetched separately from the
+ * snapshot.
+ *
+ * Like `NewsFeed`, this deliberately lives outside `ChainSnapshot`. The source
+ * documents are 0.19–5.9 MB each and 69 MB across the 40 chains that have one, so
+ * carrying them on the snapshot would put a multi-megabyte fetch on the
+ * server-rendered path. One chain is requested at a time, only when its page is
+ * open, and only the projection below is ever cached.
+ *
+ * ## Every percent here divides max supply
+ *
+ * DefiLlama publishes its own allocation percentages and they are renormalised
+ * over only the tranches it managed to classify, which makes an insider share
+ * read far larger than it is. Measured 10 September 2026: it reports Arbitrum's
+ * insiders at 39.4% where the team tranche is 26.9% of max supply, and
+ * Hyperliquid's airdrop at 79.9% where the genesis distribution is 31.0%. Every
+ * figure in this shape is therefore recomputed from the raw tranche series
+ * against `supply.maxSupply`, and whatever the schedule does not account for is
+ * carried explicitly as the `unscheduled` bucket rather than divided away.
+ */
+export interface TokenUnlockSchedule {
+  source: "defillama";
+  /** The dataset slug that resolved, so a reader can check the document. */
+  datasetSlug: string;
+  /** When this projection was computed. */
+  asOf: string;
+
+  supply: {
+    /**
+     * The schedule's own max supply, and the denominator for every percent
+     * here. For a token with no hard cap this is DefiLlama's projection at the
+     * end of the schedule, not a promise.
+     */
+    maxSupply: number;
+    /**
+     * Where that denominator came from. `schedule` is the document's own max
+     * supply; `market` is CoinGecko's, used where the document omits one, as
+     * Starknet, Sui and Ronin do; `tracked` is the schedule's eventual total,
+     * the last resort, which makes `coveragePctOfMax` 100% by construction.
+     */
+    basis: "schedule" | "market" | "tracked";
+    /** Max supply minus the part with no published unlock schedule. */
+    adjustedSupply: number;
+    /** Tokens DefiLlama marks as having no defined schedule yet. */
+    tbdAmount: number;
+    /** What the tranche series accounts for, now and at the schedule's end. */
+    trackedNow: number;
+    trackedFinal: number;
+    /** Share of max supply the tranche series accounts for at all, 0–100. */
+    coveragePctOfMax: number;
+    /**
+     * CoinGecko's circulating supply, carried so the two can be shown side by
+     * side. They disagree, sometimes by a lot — an unlocked treasury allocation
+     * counts as unlocked here and is not in circulation there. Monad measured
+     * 50.9B unlocked against 11.8B circulating.
+     */
+    circulatingSupply: number | null;
+  };
+
+  /** Max supply minus what has unlocked, floored at zero. */
+  stillToUnlockTokens: number;
+  stillToUnlockPctOfMax: number;
+  /** The part of that with a published release date. */
+  scheduledToUnlockTokens: number;
+  /** The part with none — the `unscheduled` bucket, in tokens. */
+  unscheduledTokens: number;
+  /** Tokens releasing within 90 days, from dated events only. */
+  next90dTokens: number;
+  /** The day the published schedule stops issuing, where it ends. */
+  fullyVestedAt: string | null;
+
+  /** Allocation by bucket, recomputed as a share of max supply. */
+  buckets: {
+    /** DefiLlama's category, plus `unscheduled` for the remainder. */
+    key: string;
+    label: string;
+    /** Unlocked today, as a share of max supply, 0–100. */
+    pctNow: number;
+    /** At the schedule's end, as a share of max supply, 0–100. */
+    pctFinal: number;
+    tokensNow: number;
+    tokensFinal: number;
+  }[];
+
+  /** Every tranche, so the buckets above can be audited against the source. */
+  tranches: {
+    label: string;
+    /** The bucket it was folded into. */
+    bucket: string;
+    tokensNow: number;
+    tokensFinal: number;
+    pctFinalOfMax: number;
+    /** How far through its own release, 0–100. */
+    progressPct: number | null;
+  }[];
+
+  /** The next dated unlocks, soonest first. */
+  nextUnlocks: {
+    /** ISO day. */
+    at: string;
+    /** Epoch ms, for the chart. */
+    timestamp: number;
+    tokens: number;
+    pctOfMax: number;
+    recipients: {
+      recipient: string;
+      bucket: string;
+      tokens: number;
+      kind: "cliff" | "linear";
+    }[];
+  }[];
+
+  /**
+   * Cumulative unlocked supply over time, weekly, epoch ms.
+   *
+   * Not guaranteed to rise: Ethereum's staking tranche falls where EIP-1559
+   * burns exceed issuance, and that is the source telling the truth rather than
+   * an error to smooth over.
+   */
+  vesting: { t: number; unlocked: number }[];
+
+  /** DefiLlama's own caveats about this schedule. Shown verbatim. */
+  notes: string[];
+}
+
 export interface AggregateResult {
   chains: ChainSnapshot[];
   meta: AggregateMeta;

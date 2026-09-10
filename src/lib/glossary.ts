@@ -185,6 +185,44 @@ export const GLOSSARY = {
       "Bitcoin sits near 1.0. Hyperliquid is above 4, so its circulating cap describes a fraction of the eventual supply.",
   },
 
+  unlockSchedule: {
+    title: "Still to unlock",
+    short:
+      "The share of the token's maximum supply that has not yet been released, and when the published schedule releases it.",
+    long: "Dilution overhang says how much supply is still to come. This says when, and to whom. It is read from DefiLlama's published emission schedules, which name each allocation — team, investors, public sale, treasury — and the dates it vests on.\n\nEvery percentage divides the schedule's own **maximum** supply, not the tokens in circulation. Those two numbers disagree, sometimes by a factor of four: a treasury allocation that has unlocked counts as unlocked here while nobody has sold it, so it is not in circulation. Both figures are shown side by side rather than reconciled, because neither is wrong.\n\nAvailable for 40 of the 85 chains listed. A chain with no published schedule shows nothing rather than a guess, and none of this feeds the score.",
+    formula:
+      "(maximum supply − tokens unlocked to date) ÷ maximum supply. Unlocked to date is the sum of every allocation's released amount on today's date.",
+    example:
+      "Monad has 49.9% of its maximum supply still to unlock, with a single 17.1B token release dated 24 November 2026.",
+  },
+
+  tokenAllocation: {
+    title: "Who the supply went to",
+    short:
+      "How the token's maximum supply is divided between insiders, private-sale investors, the public and the treasury.",
+    long: "Two bars: what has unlocked so far, and what the published schedule ends at. Both are shares of maximum supply, so they are directly comparable — a bucket that grows between them is one whose tokens are still arriving.\n\nThese percentages are **recomputed** from the individual allocations rather than taken from DefiLlama's own summary, which divides each bucket by only the allocations it managed to classify and so overstates every one of them. Measured September 2026, its summary puts Arbitrum's insiders at 39.4% where the team allocation is 26.9% of maximum supply. Whatever the schedule does not account for is shown as its own segment instead of being divided away.\n\nThe categories are DefiLlama's. An allocation it could not place sits in \"Other\" rather than being assigned a bucket by guesswork.",
+    example:
+      "Monad's insiders hold none of the supply unlocked today and 30.5% of the eventual supply, because the team and treasury allocations had not started vesting.",
+  },
+
+  vestingProgress: {
+    title: "Unlock curve",
+    short:
+      "Cumulative tokens released over the life of the published schedule, against the maximum supply.",
+    long: "The filled area is what has been released; the space above it is what the schedule has yet to release. A step is a cliff — a single dated release. A slope is linear vesting, paid out continuously.\n\nIt is not guaranteed to rise. Ethereum's line falls in places, because its staking issuance nets off the fees burned under EIP-1559, and that is the source recording a genuine contraction rather than an error to smooth over.",
+    formula:
+      "Every allocation's released amount summed at each date, sampled weekly or wider so the whole schedule fits in one view.",
+  },
+
+  unlockCliff: {
+    title: "Cliff and linear vesting",
+    short:
+      "A cliff releases a whole allocation on one date. Linear vesting releases it gradually.",
+    long: "The distinction matters for what to expect. A cliff is a dated event with a known size, and the supply arrives at once. Linear vesting spreads the same tokens across months or years, so it never produces a single day of pressure.\n\nThe table of upcoming releases lists cliffs only, because a linear stream has a rate rather than an amount and the two cannot be added together. Continuous vesting is already visible as the slope of the curve above.",
+    example:
+      "Monad's 24 November 2026 event is both: a 17.1B token cliff to the team and investors, and the start of a 104M-per-week linear stream.",
+  },
+
   capComparison: {
     title: "Price at another chain's market cap",
     short:
@@ -200,7 +238,7 @@ export const GLOSSARY = {
     title: "Circulating or fully diluted",
     short:
       "Whether a comparison uses the tokens in circulation today, or every token that will exist.",
-    long: "Circulating market cap is price × circulating supply: what the market values right now, and what every ratio in the ranking uses. Fully diluted is price × *total* supply — every token that exists, including those still locked.\n\nThe two differ most for young chains with long unlock schedules, which is exactly where a comparison on circulating supply alone flatters. Note that fully diluted here follows CoinGecko and counts total supply, not a hard maximum, so a token with an uncapped supply has no fully diluted figure to show.",
+    long: "Circulating market cap is price × circulating supply: what the market values right now, and what every ratio in the ranking uses. Fully diluted is price × *total* supply — every token that exists, including those still locked.\n\nThe two differ most for young chains with long unlock schedules, which is exactly where a comparison on circulating supply alone flatters. Note that fully diluted here follows CoinGecko and counts total supply, not a hard maximum, so a token with an uncapped supply has no fully diluted figure to show.\n\nWhere a chain publishes an unlock schedule, its own page breaks the gap down by date and recipient rather than leaving it as one multiple.",
   },
 
   allTimeHigh: {

@@ -168,7 +168,10 @@ export function MethodologyPanel({
             <ul className="text-ink-secondary mt-2 space-y-2 text-[12.5px] leading-relaxed">
               <li>
                 Market caps are circulating, not fully diluted. A chain with a
-                large unlock ahead will look cheaper here than it is.
+                large unlock ahead will look cheaper here than it is. Where
+                DefiLlama publishes an unlock schedule — 40 of the 85 chains
+                here — the chain&rsquo;s own page breaks it down by date and
+                recipient. It is shown, never scored.
               </li>
               <li>
                 Fees are what the chain itself earns, not what the apps on it
