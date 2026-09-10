@@ -174,6 +174,33 @@ overhang is now shown wherever a chain is called cheap, and the thesis says so
 in words. Alongside it: 24h trading volume, the honest version of "attention",
 and distance from the all-time high.
 
+### Where the supply is going
+
+The overhang says how much supply is still to come. A separate panel on each
+chain page says **when, and to whom**: the share of maximum supply still to
+unlock, the allocation split between team, private-sale investors, public sale,
+airdrop and treasury, the dated cliffs ahead, and the full unlock curve.
+
+It reads DefiLlama's published emission schedules from their static dataset CDN,
+which is open and keyless — the emissions **API** answers HTTP 402. 40 of the 85
+chains have a document, which is 58% of those with a token, and it covers the
+chains where this matters: Monad has 49.9% of its maximum supply still to unlock
+with a 17.1B token cliff dated 24 November 2026, Plasma 72%, Stable 74%, Sui 29%.
+
+**The percentages are recomputed, not read.** DefiLlama's own summary divides
+each bucket by only the allocations it managed to classify, so every one of them
+overstates: it puts Arbitrum's insiders at 39.4% where the team allocation is
+26.9% of maximum supply, and Hyperliquid's airdrop at 79.9% against 31.0%. Where
+a schedule accounts for all of the supply the two agree to within 0.05pp, which
+is how the difference was confirmed to be the renormalisation rather than a bug.
+Whatever a schedule does not account for is shown as its own segment — 61% of
+Hyperliquid's supply has no published release date at all.
+
+One more disagreement is shown rather than resolved: DefiLlama counts 50.9B MON
+as unlocked where CoinGecko reports 11.8B circulating, because an unlocked
+treasury allocation is released without being in anyone's hands. Both figures
+appear, with that sentence next to them.
+
 ### Comparing two chains
 
 A **Compare** window answers the marketcapof.com question — what one chain's
@@ -432,7 +459,9 @@ dark surface: lightness band, chroma floor, adjacent-pair CVD separation (worst
 ## Limitations
 
 - Market caps are **circulating**, not fully diluted. A chain with a large unlock
-  ahead looks cheaper here than it is.
+  ahead looks cheaper here than it is. Unlock schedules are now shown per chain
+  where DefiLlama publishes one — 40 of 85 — but they are still not scored, and
+  the 29 tokened chains without one show nothing rather than a guess.
 - Chain-level fees make most L1s look expensive on a price-to-fees basis. That is
   the correct reading for a token, and it is a different question from "is this
   chain widely used".

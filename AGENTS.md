@@ -108,6 +108,24 @@ src/stores/              zustand filters store (persisted; version-bump + migrat
   `fully_diluted_valuation` is price × **total** supply, not max supply (measured
   6 September 2026: Bitcoin implies 20.08M against a 21M max). Anything labelled
   "fully diluted" must therefore say total supply.
+- Token unlocks: DefiLlama's emissions **API** answers HTTP 402
+  (`api.llama.fi/emissions`, `/emission/{p}`, `/emissionsBreakdown`), but the
+  static dataset CDN `defillama-datasets.llama.fi/emissions/{slug}` is open and
+  keyless. 40 of 85 chains have a document; 0.19–5.9 MB each (Celo the
+  largest, its schedule running to 2050) and 69 MB in
+  total, so it is fetched one chain at a time from `chains.tokenomics` and must
+  never touch the snapshot. Nine slugs need aliases (the token is filed under
+  the bridge, foundation or flagship DEX). Four document shapes exist: two are
+  stubs, and a third omits `supplyMetrics` while carrying real tranches
+  (Starknet, Sui, Ronin), so the denominator falls back to CoinGecko's max
+  supply — validation is structural, not by field name.
+- DefiLlama's `tokenAllocation.current`/`.final` percentages are **renormalised
+  over only the classified tranches**, so every bucket overstates: Arbitrum
+  insiders read 39.4% against 26.9% of max supply, Hyperliquid's airdrop 79.9%
+  against 31.0%. Always recompute from the per-tranche series with an explicit
+  remainder. `categories` keys differ from the series labels by case and carry
+  a `" (TBD)"` suffix; the series are cumulative but **not monotonic**
+  (Ethereum's staking tranche falls, netting EIP-1559 burns).
 - Social metrics: X's API is paid, `syndication.twitter.com` answers 429 on the
   first request, CoinGecko's free `community_data` is null and keyless GitHub
   allows 60 requests an hour. CoinPaprika `/v1/coins/{id}` carries follower,

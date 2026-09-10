@@ -12,6 +12,7 @@ import {
   SIZE_FLOOR,
 } from "~/server/domain/score";
 import type { ChainMultiples } from "~/server/domain/types";
+import { fetchTokenUnlockSchedule } from "~/server/sources/defillama-emissions";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 
 export const SORT_KEYS = [
@@ -145,6 +146,38 @@ export const chainsRouter = createTRPCRouter({
         headlines: feed.headlines.filter((item) => item.chains.includes(chain)),
         coverage: feed.coverage.filter((entry) => entry.chain === chain),
       };
+    }),
+
+  /**
+   * One chain's token allocation and unlock schedule, on its own request.
+   *
+   * Not part of the snapshot, for the same reason the headlines are not: the
+   * source documents run from 0.19 to 5.9 MB and 69 MB in total, which is not
+   * something every page load can carry for a panel one chain at a time reads.
+   *
+   * Safe to query from inside the page's `HydrateClient` **only because it is
+   * never prefetched** — that is the same contract `news` above relies on, and
+   * the inverse of the warning on `compare` below. Do not add it to the
+   * prefetch list in `src/app/page.tsx`.
+   *
+   * Returns null for a chain with no token, and for the 29 tokened chains
+   * DefiLlama publishes no schedule for. The panel shows that absence.
+   */
+  tokenomics: publicProcedure
+    .input(z.object({ slug: z.string().min(1) }))
+    .query(async ({ input }) => {
+      const { chains } = await getSnapshot();
+      const chain = chains.find((entry) => entry.slug === input.slug);
+      if (!chain?.investable) return null;
+
+      return fetchTokenUnlockSchedule({
+        slug: chain.slug,
+        name: chain.name,
+        llamaName: chain.keys.llamaName,
+        geckoId: chain.keys.geckoId,
+        circulatingSupply: chain.metrics.circulatingSupply,
+        maxSupply: chain.metrics.maxSupply,
+      });
     }),
 
   /** Run metadata on its own, for the header freshness indicator. */
