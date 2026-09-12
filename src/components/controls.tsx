@@ -2,8 +2,11 @@
 
 import { Search, X } from "lucide-react";
 
+import { Explain } from "~/components/ui/explain";
 import { Segmented } from "~/components/ui/segmented";
 import { cn } from "~/lib/cn";
+import type { SupplyMix } from "~/lib/rebase-universe";
+import { BASIS_META, type CapBasis } from "~/lib/valuation-basis";
 import {
   DEFAULT_FILTERS,
   PRESETS,
@@ -18,11 +21,18 @@ import {
 export function Controls({
   filters,
   onChange,
+  basis,
+  onBasisChange,
+  supplyMix,
   resultCount,
   totalCount,
 }: {
   filters: Filters;
   onChange: (next: Filters) => void;
+  basis: CapBasis;
+  onBasisChange: (next: CapBasis) => void;
+  /** Which denominator each chain used. Null while on circulating. */
+  supplyMix: SupplyMix | null;
   resultCount: number;
   totalCount: number;
 }) {
@@ -32,6 +42,21 @@ export function Controls({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
+        {/*
+          First in the row because it is not a filter: the others narrow the
+          set, this one changes what every number in it means.
+        */}
+        <Segmented
+          label="Valuation basis"
+          value={basis}
+          onChange={onBasisChange}
+          options={(["circulating", "diluted"] as CapBasis[]).map((key) => ({
+            value: key,
+            label: BASIS_META[key].short,
+            hint: BASIS_META[key].hint,
+          }))}
+        />
+
         <Segmented
           label="Screen preset"
           value={filters.preset}
@@ -112,6 +137,21 @@ export function Controls({
         <span className="text-ink-faint">
           {PRESETS[filters.preset].description}
         </span>
+        {supplyMix && (
+          <span className="text-ink-secondary inline-flex items-center gap-1">
+            Priced on every token that will exist: maximum supply for{" "}
+            <span className="tnum">{supplyMix.max}</span> chains, total supply
+            for <span className="tnum">{supplyMix.total}</span> with no cap
+            {supplyMix.missing > 0 && (
+              <>
+                , and <span className="tnum">{supplyMix.missing}</span> unrated
+                for want of either
+              </>
+            )}
+            .
+            <Explain term="capBasis" side="top" />
+          </span>
+        )}
         {JSON.stringify(filters) !== JSON.stringify(DEFAULT_FILTERS) && (
           <button
             type="button"

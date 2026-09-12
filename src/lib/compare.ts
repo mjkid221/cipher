@@ -1,3 +1,4 @@
+import { dilutedCapOf } from "~/lib/valuation-basis";
 import type { CapBasis } from "~/stores/compare-store";
 
 /**
@@ -37,6 +38,7 @@ export interface CompareSide {
   fdv: number | null;
   circulatingSupply: number | null;
   totalSupply: number | null;
+  maxSupply: number | null;
   athPrice: number | null;
   athDate: string | null;
 }
@@ -69,16 +71,25 @@ const positive = (value: number | null | undefined): number | null =>
     ? value
     : null;
 
-/** The valuation of one side on the chosen basis. */
+/**
+ * The valuation of one side on the chosen basis.
+ *
+ * The diluted case goes through `dilutedCapOf` rather than reading CoinGecko's
+ * `fdv` directly, so "fully diluted" means the same thing here as it does on
+ * the screen's own basis toggle: price x maximum supply for a capped token,
+ * falling back to CoinGecko's total-supply figure only where no cap exists.
+ * Reading `fdv` here would have put Aptos at $0.74B in this window and $1.28B
+ * in the ranking, under the same label.
+ */
 export function capOf(side: CompareSide, basis: CapBasis): number | null {
-  return positive(basis === "circulating" ? side.marketCap : side.fdv);
+  if (basis === "circulating") return positive(side.marketCap);
+  return positive(dilutedCapOf(side).value);
 }
 
-/** The supply the chosen basis counts. */
+/** The supply the chosen basis counts. Paired with `capOf`, so they agree. */
 export function supplyOf(side: CompareSide, basis: CapBasis): number | null {
-  return positive(
-    basis === "circulating" ? side.circulatingSupply : side.totalSupply,
-  );
+  if (basis === "circulating") return positive(side.circulatingSupply);
+  return positive(side.maxSupply) ?? positive(side.totalSupply);
 }
 
 /** A's price if A were valued at `cap`. Null when either valuation is missing. */

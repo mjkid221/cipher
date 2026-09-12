@@ -218,6 +218,9 @@ export const chainsRouter = createTRPCRouter({
           fdv: chain.metrics.fdv,
           circulatingSupply: chain.metrics.circulatingSupply,
           totalSupply: chain.metrics.totalSupply,
+          // For the fully diluted side: a capped token's diluted value is
+          // price x max supply, and CoinGecko's own `fdv` counts total supply.
+          maxSupply: chain.metrics.maxSupply,
           athPrice: chain.metrics.athPrice,
           athDate: chain.metrics.athDate,
           fromAllTimeHigh: chain.metrics.fromAllTimeHigh,

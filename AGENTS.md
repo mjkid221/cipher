@@ -38,7 +38,8 @@ src/server/sources/      one adapter per upstream: defillama, artemis, mayan, co
 src/server/cache/        cachedValue(key, {ttlSeconds, staleSeconds}, loader): L1 map + Upstash Redis,
                          stale-while-revalidate, refreshes kept alive with waitUntil
 src/server/api/routers/  chains (list, detail, meta, news, methodology, compare), market (brief, cycle, detail)
-src/components/          screen.tsx (home), chain-detail.tsx, compare-window.tsx, table/, chart/,
+src/components/          screen.tsx (home), division-leaders.tsx (the L1/L2 hero),
+                         chain-detail.tsx, compare-window.tsx, table/, chart/,
                          market/, window/, ui/
 src/lib/                 palette (tiers, rainbow, zone strokes), glossary, format, cycle-models, market-zones
 src/stores/              zustand filters store (persisted; version-bump + migrate on shape changes)
@@ -81,7 +82,20 @@ src/stores/              zustand filters store (persisted; version-bump + migrat
    Windows read prefetched data through their own queries only when those keys
    are never prefetched (market.cycle, market.detail, chains.compare) or via
    the detail payload.
-8. **Config changes that change data shape bump a cache key** (the snapshot key
+8. **`score.ts` and `thesis.ts` must stay pure.** The home screen imports both
+   into the browser to re-score the universe on fully diluted valuation
+   (`lib/rebase-universe.ts`), so neither may import `server-only`, the cache,
+   an adapter, or anything else with a runtime dependency — types only. This is
+   what guarantees the two bases are the same model rather than two
+   implementations: measured 12 September 2026, the client recompute reproduces
+   the server's scores to 3.9e-14 with identical tiers and multiples. Check with
+   `grep -n "^import" src/server/domain/score.ts src/server/domain/thesis.ts`.
+9. **"Fully diluted" means one thing.** `dilutedCapOf` in
+   `lib/valuation-basis.ts` is the single definition — price × maximum supply
+   where a chain has one, CoinGecko's total-supply `fdv` only where it does not
+   — and both the basis toggle and the Compare window go through it. Do not
+   read `metrics.fdv` directly for anything labelled "fully diluted".
+10. **Config changes that change data shape bump a cache key** (the snapshot key
    carries the universe cap) and, for the persisted store, the version with a
    `migrate`.
 

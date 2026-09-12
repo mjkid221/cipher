@@ -10,14 +10,17 @@ import {
 import { Controls } from "~/components/controls";
 import { applyFilters } from "~/components/filters";
 import { PageHeader } from "~/components/header";
-import { HeadlineCall } from "~/components/headline-call";
+import { DivisionLeaders, type Division } from "~/components/division-leaders";
 import { MarketRail } from "~/components/market/market-rail";
 import { MethodologyPanel } from "~/components/methodology";
 import { SiteFooter } from "~/components/site-footer";
 import { ChainTable } from "~/components/table/chain-table";
 import { Panel } from "~/components/ui/primitives";
 import { cn } from "~/lib/cn";
+import { rebaseUniverse } from "~/lib/rebase-universe";
+import { capLabel } from "~/lib/valuation-basis";
 import { useFiltersStore } from "~/stores/filters-store";
+import type { ChainSnapshot } from "~/server/domain/types";
 import { api } from "~/trpc/react";
 
 export function Screen() {
@@ -26,6 +29,8 @@ export function Screen() {
   // first client render agree; see the store for why.
   const filters = useFiltersStore((state) => state.filters);
   const setFilters = useFiltersStore((state) => state.setFilters);
+  const basis = useFiltersStore((state) => state.basis);
+  const setBasis = useFiltersStore((state) => state.setBasis);
   useEffect(() => {
     void useFiltersStore.persist.rehydrate();
   }, []);
@@ -65,8 +70,26 @@ export function Screen() {
     },
   });
 
-  const chains = useMemo(() => list.data?.chains ?? [], [list.data]);
+  const served = useMemo(() => list.data?.chains ?? [], [list.data]);
   const meta = list.data?.meta;
+
+  /*
+   * Fully diluted mode re-scores the universe in the browser.
+   *
+   * `scoreUniverse` is pure and every chain's metrics are already here, so the
+   * second basis costs one pass over 85 rows rather than a second snapshot.
+   * Circulating deliberately returns the served data untouched: it is the same
+   * function over the same inputs, so recomputing it would only add a way for
+   * the screen to disagree with the API it was rendered from.
+   */
+  const rebased = useMemo(
+    () =>
+      basis === "diluted" && served.length ? rebaseUniverse(served) : null,
+    [served, basis],
+  );
+
+  const chains = rebased?.chains ?? served;
+  const regression = rebased?.regression ?? meta?.regression ?? null;
 
   const visible = useMemo(
     () => applyFilters(chains, filters),
@@ -83,18 +106,70 @@ export function Screen() {
     return values[Math.floor(values.length / 2)] ?? null;
   }, [chains]);
 
-  /** The chain the hero leads with: widest gap among the trustworthy ones. */
-  const headline = useMemo(
-    () =>
-      chains.find(
-        (chain) =>
-          chain.investable &&
-          !chain.valueTrapRisk &&
-          chain.scores.confidence >= 0.6 &&
-          (chain.scores.mispricing ?? 0) > 0,
-      ) ?? chains[0],
-    [chains],
-  );
+  /**
+   * The hero's two findings: the widest gap in each layer.
+   *
+   * Deliberately computed from every chain rather than the filtered set, the
+   * way the single headline was. The hero states what the screen found; a
+   * reader narrowing the table to one preset has not changed that answer.
+   */
+  const leaders = useMemo(() => {
+    const clears = (chain: ChainSnapshot) =>
+      chain.investable &&
+      !chain.valueTrapRisk &&
+      chain.scores.confidence >= 0.6 &&
+      (chain.scores.mispricing ?? 0) > 0;
+
+    const build = (layer: "L1" | "L2", label: string): Division => {
+      const field = chains.filter((chain) => chain.layer === layer);
+      const ranked = field
+        .filter(clears)
+        .sort(
+          (a, b) => (b.scores.mispricing ?? 0) - (a.scores.mispricing ?? 0),
+        );
+      return {
+        layer,
+        label,
+        leader: ranked[0] ?? null,
+        runnerUp: ranked[1] ?? null,
+        fieldSize: field.length,
+        peers: field
+          .map((chain) => chain.scores.mispricing)
+          .filter((score): score is number => score !== null),
+      };
+    };
+
+    const divisions = [build("L1", "Layer 1"), build("L2", "Layer 2")];
+    const best = Math.max(
+      ...divisions.map((d) => d.leader?.scores.mispricing ?? -Infinity),
+    );
+
+    // A chain in neither division that beats both leaders is named rather than
+    // quietly dropped, since the divisions do not cover the whole universe.
+    const unclassified = chains.filter((chain) => chain.layer === null);
+    const outsider =
+      unclassified
+        .filter(clears)
+        .sort((a, b) => (b.scores.mispricing ?? 0) - (a.scores.mispricing ?? 0))
+        .find((chain) => (chain.scores.mispricing ?? 0) > best) ?? null;
+
+    // The methodology panel works through one chain. The stronger of the two
+    // leaders is the one the reader has just been looking at.
+    const example =
+      divisions
+        .map((d) => d.leader)
+        .filter((chain): chain is ChainSnapshot => chain !== null)
+        .sort(
+          (a, b) => (b.scores.mispricing ?? 0) - (a.scores.mispricing ?? 0),
+        )[0] ?? chains[0];
+
+    return {
+      divisions,
+      outsider,
+      example,
+      unclassifiedCount: unclassified.length,
+    };
+  }, [chains]);
 
   /** Fixed y domain: every market cap in the universe, filtered or not. */
   const marketCapDomain = useMemo(
@@ -154,15 +229,16 @@ export function Screen() {
           comes second, which is where it lands below `xl`: under the hero.
         */}
         <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px] xl:grid-rows-[auto_1fr]">
-          {headline && (
-            <HeadlineCall
-              id="headline"
-              chain={headline}
-              universeSize={meta.universeSize}
-              belowPar={deepValue}
-              className="xl:col-start-1 xl:row-start-1"
-            />
-          )}
+          <DivisionLeaders
+            id="headline"
+            divisions={leaders.divisions}
+            universeSize={meta.universeSize}
+            undervaluedCount={deepValue}
+            unclassifiedCount={leaders.unclassifiedCount}
+            outsider={leaders.outsider}
+            capLabel={capLabel(basis)}
+            className="xl:col-start-1 xl:row-start-1"
+          />
 
           <MarketRail
             id="market-rail"
@@ -179,14 +255,15 @@ export function Screen() {
             <AlphaMap
               points={points}
               yDomain={marketCapDomain}
+              capLabel={capLabel(basis)}
               regression={
-                meta.regression
+                regression
                   ? {
-                      slope: meta.regression.slope,
-                      intercept: meta.regression.intercept,
-                      residualSd: meta.regression.residualSd,
-                      rSquared: meta.regression.rSquared,
-                      sampleSize: meta.regression.sampleSize,
+                      slope: regression.slope,
+                      intercept: regression.intercept,
+                      residualSd: regression.residualSd,
+                      rSquared: regression.rSquared,
+                      sampleSize: regression.sampleSize,
                     }
                   : null
               }
@@ -197,6 +274,9 @@ export function Screen() {
         <Controls
           filters={filters}
           onChange={setFilters}
+          basis={basis}
+          onBasisChange={setBasis}
+          supplyMix={rebased?.supplyMix ?? null}
           resultCount={visible.length}
           totalCount={chains.length}
         />
@@ -208,7 +288,7 @@ export function Screen() {
         <MethodologyPanel
           methodology={methodology.data}
           meta={meta}
-          example={headline}
+          example={leaders.example}
         />
       </main>
 

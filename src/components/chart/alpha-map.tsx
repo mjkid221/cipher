@@ -52,12 +52,18 @@ export function AlphaMap({
    * longer line up with the axis it is drawn against.
    */
   yDomain,
+  /**
+   * What the y axis is measuring. The home screen can re-price the universe on
+   * fully diluted valuation, and the axis has to say which one it is plotting.
+   */
+  capLabel = "Market cap",
   className,
 }: {
   points: readonly AlphaPoint[];
   regression: AlphaRegression | null;
   highlightSlug?: string;
   yDomain?: readonly number[];
+  capLabel?: string;
   className?: string;
 }) {
   const { ref, width } = useMeasure<HTMLDivElement>();
@@ -182,7 +188,7 @@ export function AlphaMap({
           width={width}
           height={height}
           role="img"
-          aria-label="Market capitalisation plotted against economic scale, with the peer trend line. The ranked table below carries the same values."
+          aria-label={`${capLabel} plotted against economic scale, with the peer trend line. The ranked table below carries the same values.`}
         >
           <defs>
             <clipPath id={`${clipId}-plot`}>
@@ -410,7 +416,7 @@ export function AlphaMap({
           </div>
           <dl className="mt-1.5 space-y-1 text-[11.5px]">
             <Row
-              label="Market cap"
+              label={capLabel}
               value={formatUsd(tooltipEntry.point.marketCap)}
             />
             <Row label="Scale index" value={tooltipEntry.point.x.toFixed(0)} />
