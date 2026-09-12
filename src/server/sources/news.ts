@@ -1,6 +1,10 @@
 import "server-only";
 
 import { cachedValue } from "~/server/cache/cached";
+import {
+  classifyHeadline,
+  type NewsCategory,
+} from "~/server/domain/news-classify";
 import { mapLimit } from "~/server/lib/http";
 
 /**
@@ -46,6 +50,8 @@ export interface Headline {
   publishedAt: string | null;
   /** Chains this headline is about. */
   chains: string[];
+  /** What kind of news this is, where the headline says so plainly. */
+  category: NewsCategory | null;
 }
 
 /** How much a chain was written about, against how much is shown. */
@@ -154,6 +160,113 @@ const QUERY_OVERRIDES: Record<string, string> = {
 };
 
 /**
+ * What counts as a headline naming a chain.
+ *
+ * A search for a chain returns whatever Google thinks is relevant, and for any
+ * chain whose name is an ordinary English word that is mostly not the chain.
+ * Measured 12 September 2026 across 1,989 headline-chain pairs, 488 never named
+ * the chain at all, and for some the feed was almost entirely noise: Abstract
+ * 45 of 46, Provenance 17 of 19, Linea 18 of 23, BOB 30 of 39. Abstract's were
+ * about XRP, Kalshi and the Fed; Berachain's three were "Top Blockchain
+ * Airdrops — Page 11" and a Greenlane earnings report.
+ *
+ * So a result is kept only when its title names the chain. Most chains need no
+ * entry here — their own name plus their symbol is enough. These are the ones
+ * where the bare name is a word English already uses, or where the project is
+ * known by something else.
+ *
+ * Adjacency is deliberately not encoded. Linea's feed is full of MetaMask and
+ * Consensys stories, and Consensys is Linea's parent, but those articles are
+ * about Consensys.
+ */
+const NEWS_ALIASES: Record<string, string[]> = {
+  Abstract: ["abstract chain", "abstract global"],
+  Avalanche: ["avalanche", "avax"],
+  "Avalanche C-Chain": ["avalanche", "avax"],
+  Base: [
+    "base chain",
+    "base app",
+    "base network",
+    "coinbase's base",
+    "on base",
+  ],
+  "BNB Chain": ["bnb chain", "bnb", "binance smart chain", "bsc"],
+  BOB: ["bob chain", "build on bitcoin"],
+  "Bifrost Network": ["bifrost"],
+  Core: ["core blockchain", "core dao", "coredao"],
+  Corn: ["corn chain", "corn blockchain"],
+  Flare: ["flare network", "flare blockchain", "flr"],
+  "Gnosis Chain": ["gnosis"],
+  "Immutable zkEVM": ["immutable"],
+  Ink: ["ink chain", "ink blockchain", "kraken's ink"],
+  "Internet Computer": ["internet computer", "icp", "dfinity"],
+  Mode: ["mode network"],
+  Multiversx: ["multiversx", "elrond", "egld"],
+  Near: ["near protocol", "nearprotocol"],
+  "OP Mainnet": ["op mainnet", "optimism"],
+  "Polygon PoS": ["polygon", "matic"],
+  Provenance: ["provenance blockchain"],
+  RISE: ["rise chain", "rise blockchain"],
+  Ripple: ["ripple", "xrp"],
+  "Robinhood Chain": ["robinhood"],
+  "Ronin Network": ["ronin"],
+  Rootstock: ["rootstock", "rsk"],
+  "Sei Network": ["sei"],
+  Sonic: ["sonic labs", "sonic chain", "sonic network", "sonic blockchain"],
+  // No bare "stable": it recovers five real headlines and five about Wyoming's
+  // stable token and Uniswap's stable pairs. The ticker form keeps precision.
+  Stable: ["stable chain", "stablechain", "stable (stable)", "$stable"],
+  Story: ["story protocol"],
+  TON: ["toncoin", "ton", "ton blockchain", "the open network"],
+  Vaulta: ["vaulta", "eos"],
+  "X Layer": ["x layer", "xlayer"],
+  "XPR Network": ["xpr network", "proton chain"],
+  "zkSync Era": ["zksync", "zk sync"],
+};
+
+/** The terms whose presence in a title counts as the headline being about a chain. */
+function termsFor(chain: { name: string; symbol: string | null }): string[] {
+  const custom = NEWS_ALIASES[chain.name];
+  if (custom) return custom;
+
+  const terms = [chain.name.toLowerCase()];
+  const symbol = chain.symbol?.toLowerCase();
+  // Two-letter tickers are noise — "OP" and "S" match half the language — and a
+  // symbol with digits or punctuation is not a word anyone writes in a headline.
+  if (symbol && symbol.length >= 3 && /^[a-z]+$/.test(symbol)) {
+    terms.push(symbol);
+  }
+  return terms;
+}
+
+const isWordChar = (char: string | undefined) =>
+  char !== undefined && /[a-z0-9]/.test(char);
+
+/**
+ * Whether a title names one of `terms`, on word boundaries.
+ *
+ * Boundaries rather than `includes`, or "near" matches "climbs near $65,000"
+ * and "ton" matches "Washington".
+ */
+function mentions(title: string, terms: readonly string[]): boolean {
+  const haystack = title.toLowerCase();
+  return terms.some((term) => {
+    let from = 0;
+    for (;;) {
+      const at = haystack.indexOf(term, from);
+      if (at === -1) return false;
+      if (
+        !isWordChar(haystack[at - 1]) &&
+        !isWordChar(haystack[at + term.length])
+      ) {
+        return true;
+      }
+      from = at + 1;
+    }
+  });
+}
+
+/**
  * Google News ranks by relevance, not date, and will happily return a
  * well-linked article from six months ago. `when:` bounds it to recent results,
  * which is the whole point of a headline list.
@@ -188,13 +301,17 @@ function stripOutlet(title: string, source: string): string {
 export function fetchHeadlines(
   universe: readonly { name: string; symbol: string | null }[],
 ) {
-  const names = universe.slice(0, MAX_CHAINS).map((chain) => chain.name);
+  const targets = universe.slice(0, MAX_CHAINS);
+  const names = targets.map((chain) => chain.name);
 
   return cachedValue(
-    `news:headlines:${names.length}`,
+    // v3: headlines carry a category, and results are filtered to those that
+    // actually name the chain — the cached shape and its contents both changed.
+    `news:headlines:v3:${names.length}`,
     { ttlSeconds: 1800, staleSeconds: 21_600 },
     async (): Promise<NewsResult> => {
-      const perChain = await mapLimit(names, 6, async (chain) => {
+      const perChain = await mapLimit(targets, 6, async (entry) => {
+        const chain = entry.name;
         try {
           const url = `${SEARCH}?q=${encodeURIComponent(queryFor(chain))}&hl=en-US&gl=US&ceid=US:en`;
           const response = await fetch(url, {
@@ -210,17 +327,27 @@ export function fetchHeadlines(
 
           const all = parseFeed(await response.text());
 
+          // Keep only what is actually about this chain. Google returns its
+          // best guess at relevance, which for a chain named after an English
+          // word is mostly other people's news.
+          const terms = termsFor(entry);
+          const about = all.filter((item) => mentions(item.title, terms));
+
           // Sort before truncating. Google orders by relevance, so slicing its
           // order kept a three-week-old explainer and dropped this morning's
           // news — a list that looked chronological but was a relevance sample.
-          const newest = [...all].sort((a, b) =>
+          const newest = [...about].sort((a, b) =>
             (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""),
           );
 
           return {
             chain,
             found: all.length,
-            items: newest.map((item) => ({ ...item, chains: [chain] })),
+            items: newest.map((item) => ({
+              ...item,
+              chains: [chain],
+              category: classifyHeadline(item.title),
+            })),
           };
         } catch {
           // One chain's search failing costs that chain's headlines, nothing more.
@@ -261,7 +388,7 @@ export function fetchHeadlines(
   );
 }
 
-function parseFeed(xml: string): Omit<Headline, "chains">[] {
+function parseFeed(xml: string): Omit<Headline, "chains" | "category">[] {
   const blocks = xml.match(/<item[\s>][\s\S]*?<\/item>/gi) ?? [];
 
   return blocks

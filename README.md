@@ -339,6 +339,45 @@ No free crypto news API exists: CoinGecko's is Pro-only, CryptoPanic wants a key
 Google News publishes any search as RSS without one, which is what makes
 per-chain coverage possible. Roughly 1,300 articles across 44 chains.
 
+#### What kind of news, and why not bullish or bearish
+
+Each headline can carry a badge naming the event — Exploit, Outage, Legal,
+Launch, Listing, Upgrade, Partnership, Funding, Price up, Price down — tinted by
+whether it reads well or badly. No article is read: Google News RSS carries a
+title and no body, and there is no keyless sentiment service (CryptoPanic
+answers 403 without a key, measured September 2026). It is a pattern match on
+the headline.
+
+**It deliberately does not say bullish or bearish.** That version was built
+first and measured against all 1,842 live headlines. It labelled 43% of them and
+got the direction wrong roughly a quarter of the time, confidently: `Airdropping`
+matched `drop`; "Bitcoin climbs *despite* equity weakness" read bearish; "no user
+funds lost" read *bullish* on a story about an attack. Restricting to patterns
+that label themselves, and refusing any headline holding two directions at once,
+took coverage to 24% and accuracy to roughly 87% on the positive side. The split
+is the finding: **a headline reliably says what happened and unreliably says what
+it means for the price.** So the badge names the event and leaves the conclusion
+to the reader.
+
+Positive badges outrun negative ones about two to one. That is the press, not the
+market — outlets write "surges" far more often than "drops".
+
+#### Only headlines that name the chain
+
+A search for a chain returns Google's idea of relevance, and for a chain named
+after an ordinary English word that is mostly somebody else's news. Measured
+across 1,989 headline-chain pairs, 488 never named the chain: Abstract's 46 were
+about XRP, Kalshi and the Fed; BOB's included Bank of Baroda and an obituary;
+Berachain's three were "Top Blockchain Airdrops — Page 11" and a Greenlane
+earnings report.
+
+A result is now kept only when its title names the chain, by name, ticker or a
+short alias list. That drops 29% of headlines and takes ten chains to zero —
+correctly, since those feeds were noise, and the interface already says when a
+chain has no coverage. Large feeds are barely touched: Ripple keeps 100%, Solana
+99%, Ethereum 87%. Adjacency is not encoded — Linea's feed is full of MetaMask
+and Consensys stories, and those are about Consensys.
+
 **Two bugs are worth recording, because both produced output that looked
 plausible.**
 

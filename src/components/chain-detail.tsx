@@ -12,6 +12,7 @@ import { useMemo } from "react";
 
 import { AlphaMap, type AlphaPoint } from "~/components/chart/alpha-map";
 import { ChainTokenomics } from "~/components/chain-tokenomics";
+import { NewsBadge } from "~/components/news/news-badge";
 import { OutletMark } from "~/components/news/outlet-mark";
 import { ParScale } from "~/components/chart/par-scale";
 import { AreaChart } from "~/components/chart/area-chart";
@@ -729,8 +730,10 @@ export function ChainDetail({ slug }: { slug: string }) {
           <Panel
             title={`Headlines mentioning ${chain.name}`}
             subtitle={
+              // `shown`, not `found`: `found` is what the search returned,
+              // which includes results that never named this chain.
               news.data?.coverage[0]
-                ? `${news.data.coverage[0].found} article${news.data.coverage[0].found === 1 ? "" : "s"} in the last ${news.data.windowDays} days, newest first.`
+                ? `${news.data.coverage[0].shown} article${news.data.coverage[0].shown === 1 ? "" : "s"} in the last ${news.data.windowDays} days, newest first.`
                 : "Newest first."
             }
             bodyClassName="p-0"
@@ -757,11 +760,14 @@ export function ChainDetail({ slug }: { slug: string }) {
                           aria-hidden
                         />
                       </span>
-                      <span className="text-ink-faint mt-1 block text-[11px]">
-                        {item.source}
-                        {item.publishedAt
-                          ? ` · ${new Date(item.publishedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
-                          : ""}
+                      <span className="text-ink-faint mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+                        <NewsBadge category={item.category} />
+                        <span>
+                          {item.source}
+                          {item.publishedAt
+                            ? ` · ${new Date(item.publishedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
+                            : ""}
+                        </span>
                       </span>
                     </span>
                   </a>

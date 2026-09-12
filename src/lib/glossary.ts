@@ -250,6 +250,15 @@ export const GLOSSARY = {
       "multiple = all-time-high price ÷ current price. Implied cap = all-time-high price × today's supply.",
   },
 
+  newsCategory: {
+    title: "What kind of news",
+    short:
+      "A badge naming the event a headline describes — an exploit, a listing, a launch, a dated price move — tinted by whether it reads well or badly.",
+    long: 'It is a pattern match on the headline, and nothing more. No article is read: the feed is Google News RSS, which carries a title and no body, and every source in this app is free and keyless, so there is no sentiment service behind it.\n\nIt deliberately does not say "bullish" or "bearish". That version was built and measured against 1,842 headlines: it labelled far more of them, and got the direction wrong about a quarter of the time in ways that looked confident — "Bitcoin climbs despite equity weakness" read as bearish, and "no user funds lost" read as bullish. A headline reliably says what happened and unreliably says what it means for the price, so the badge names the event and leaves the conclusion to you.\n\nAbout a quarter of headlines carry one. The rest say nothing unambiguous enough — anything holding two directions at once is left alone rather than guessed at.',
+    example:
+      'Positive badges outnumber negative ones roughly two to one. That is the press, not the market: outlets write "surges" far more often than "drops".',
+  },
+
   attention: {
     title: "Market attention",
     short:

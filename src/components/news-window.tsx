@@ -1,6 +1,8 @@
 "use client";
 
 import { ArrowUpRight, Search } from "lucide-react";
+import { Explain } from "~/components/ui/explain";
+import { NewsBadge } from "~/components/news/news-badge";
 import { useMemo, useState } from "react";
 
 import { OutletMark } from "~/components/news/outlet-mark";
@@ -54,7 +56,7 @@ export function NewsWindow({
       title="Headlines"
       subtitle={
         coverage.length
-          ? `${coverage.reduce((sum, entry) => sum + entry.found, 0)} articles across ${coverage.length} chains · 30d`
+          ? `${coverage.reduce((sum, entry) => sum + entry.shown, 0)} articles across ${coverage.length} chains · 30d`
           : undefined
       }
       open={open}
@@ -130,6 +132,7 @@ function NewsList({
             aria-label="Search headlines"
             className="placeholder:text-ink-faint w-full bg-transparent text-[12px] outline-none"
           />
+          <Explain term="newsCategory" side="bottom" />
         </label>
 
         <div className="scroll-slim flex gap-1 overflow-x-auto px-3 py-2">
@@ -145,7 +148,7 @@ function NewsList({
               }
             >
               {entry.chain}
-              <span className="text-ink-faint tnum ml-1">{entry.found}</span>
+              <span className="text-ink-faint tnum ml-1">{entry.shown}</span>
             </Chip>
           ))}
         </div>
@@ -157,14 +160,17 @@ function NewsList({
             const entry = chains.find((c) => c.chain === chain);
             if (!entry) return `Nothing found for ${chain}.`;
 
-            // Count what is on screen, not what the search returned. The same
-            // story often runs at two outlets under an identical headline, and
-            // those collapse into one row — so "100 found" can list 97.
+            // Count what is on screen, not what the search returned. Two
+            // things shrink the list: a search result whose headline never
+            // names the chain is dropped, because a search for a chain named
+            // after an English word mostly returns other people's news; and the
+            // same story running at two outlets under one headline collapses
+            // into a single row.
             const listed = visible.length;
-            const collapsed = entry.found - listed;
+            const dropped = entry.found - listed;
 
-            return collapsed > 0
-              ? `${listed} articles about ${chain} in the last 30 days, from ${entry.found} results — ${collapsed} were the same headline twice.`
+            return dropped > 0
+              ? `${listed} article${listed === 1 ? "" : "s"} about ${chain} in the last 30 days, from ${entry.found} search results — the other ${dropped} either did not name ${chain} or repeated a headline already listed.`
               : `All ${listed} article${listed === 1 ? "" : "s"} about ${chain} in the last 30 days.`;
           })()}
         </p>
@@ -194,7 +200,8 @@ function NewsList({
                   />
                 </span>
 
-                <span className="text-ink-faint mt-1.5 flex flex-wrap items-center gap-x-2 text-[11px]">
+                <span className="text-ink-faint mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+                  <NewsBadge category={item.category} />
                   <span>{item.source}</span>
                   {item.publishedAt && (
                     <>
