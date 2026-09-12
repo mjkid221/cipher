@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 
+import { GitHubMark, SOCIAL, XMark } from "~/components/ui/brand-marks";
 import { useWindows } from "~/components/window/window-context";
 
 import { cn } from "~/lib/cn";
@@ -102,6 +103,8 @@ export function PageHeader({
               <Command className="size-3" aria-hidden />K
             </button>
           )}
+
+          <SocialLinks condensed={condensed} />
         </div>
       </div>
 
@@ -150,6 +153,65 @@ function useCondensed(): boolean {
   }, []);
 
   return condensed;
+}
+
+/**
+ * Where the project lives, shown only at the top of the page.
+ *
+ * These are the least urgent things in the bar, so they get the space only
+ * while nothing is competing for it. Past the first scroll they collapse to
+ * zero width and fade, which keeps the condensed header to what a reader
+ * scrolling a ranking actually needs.
+ *
+ * Collapsed is not merely invisible: a zero-width link with `opacity: 0` still
+ * takes keyboard focus, which would put the focus ring somewhere nothing is
+ * drawn. They are removed from the tab order and from the accessibility tree
+ * while hidden, and the footer carries the same two links for anyone who has
+ * scrolled past them.
+ *
+ * Hidden below `xl` regardless, and that breakpoint was measured rather than
+ * guessed: at `lg` these 69px tipped the bar onto a second row from 1100 to
+ * 1180px, taking the header from 64px to 104px. (At exactly 1024 it wraps
+ * anyway — that is the tagline arriving at `lg`, and it predates these links.)
+ * Below `xl` the footer is the place for them.
+ */
+function SocialLinks({ condensed }: { condensed: boolean }) {
+  return (
+    <span
+      className={cn(
+        "hidden items-center overflow-hidden transition-all xl:flex",
+        condensed
+          ? "pointer-events-none max-w-0 opacity-0"
+          : "max-w-[8rem] opacity-100",
+      )}
+      style={{
+        transitionDuration: "var(--dur-standard)",
+        transitionTimingFunction: "var(--ease-standard)",
+      }}
+      aria-hidden={condensed}
+    >
+      <span className="bg-hairline mx-1.5 h-4 w-px shrink-0" aria-hidden />
+      {[
+        { ...SOCIAL.github, Mark: GitHubMark },
+        { ...SOCIAL.x, Mark: XMark },
+      ].map(({ href, label, title, Mark }) => (
+        <a
+          key={href}
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          title={title}
+          aria-label={title}
+          tabIndex={condensed ? -1 : undefined}
+          className="text-ink-muted hover:text-ink rounded-control inline-flex size-7 shrink-0 items-center justify-center transition-colors"
+          style={{ transitionDuration: "var(--dur-micro)" }}
+        >
+          <Mark />
+          <span className="sr-only">{label}</span>
+        </a>
+      ))}
+    </span>
+  );
 }
 
 /**
