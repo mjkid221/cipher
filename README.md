@@ -67,6 +67,33 @@ Momentum earns a quarter of the weight deliberately. A cheap multiple on a
 shrinking fee stream is a value trap, not an opportunity — those chains are
 flagged separately and can be filtered out.
 
+### Two leaders, not one headline
+
+The screen opens on the widest value gap in **each layer** rather than one
+winner overall. An L1 and a rollup are not competing for the same thing, and a
+single headline hid that: the widest gap anywhere is Monad on circulating supply
+and OP Mainnet on fully diluted, so the hero changed identity when the basis
+toggle moved, for a reason that had nothing to do with either chain. Split by
+division, both leaders hold on either basis and what changes is the margin —
+Monad is 28 points clear of the best rollup on circulating and 8 behind it on
+fully diluted.
+
+A leader has to clear the same bar the old hero used: a real token, undervalued,
+not a value-trap shape, and confidence at 60% or better. Mezo posts a wider L1
+gap than the runner-up on decaying activity, and Chainflip beats both leaders on
+42% confidence; neither is a finding worth leading with.
+
+Beside each figure is that division's field on the value scale — one tick per
+rated chain, the leader marked — because "56 points undervalued" says nothing
+about whether the winner is clear of the pack or a nose ahead. It runs vertically
+with undervalued *downward*, the same geometry as the alpha map and the chain
+page's scale, so the screen keeps one mental model for the quantity.
+
+CoinGecko classifies 41 chains as L1 and 24 as L2, which leaves **20 that are
+neither** — appchains, sidechains, validiums. They are not guessed into a
+division to tidy the layout: a footnote says how many sit outside, and names one
+when its gap would have beaten both leaders.
+
 ### Confidence
 
 `confidence` (0–1) blends how many model inputs the chain actually supplied with
@@ -173,6 +200,35 @@ a large unlock ahead: Hyperliquid trades at **4.3×** its circulating cap. The
 overhang is now shown wherever a chain is called cheap, and the thesis says so
 in words. Alongside it: 24h trading volume, the honest version of "attention",
 and distance from the all-time high.
+
+### Pricing the screen on all of the supply
+
+A control above the table switches the whole home screen between **circulating**
+and **fully diluted** valuation. It is not a recoloured column: on the diluted
+basis every one of the six ratios, the rank gap, the peer trend line, the
+implied upside and the tier are scored again, so it is the same model asked the
+other question. The table, the alpha map and the hero all move together, and the
+choice persists across refreshes.
+
+It runs in the browser. `scoreUniverse` and `buildThesis` are pure functions of
+the snapshot and the screen already holds every chain's metrics, so the second
+basis costs one pass over 85 rows — no second snapshot, no cache key, no cron.
+Because it calls the same functions the server does, the two bases cannot drift:
+fed circulating caps, the client recompute reproduces the server's scores to
+3.9e-14 with identical tiers, multiples and regression.
+
+**"Fully diluted" means maximum supply**, not CoinGecko's figure. CoinGecko's
+`fully_diluted_valuation` counts *total* supply even for a capped token, which
+understates the dilution it claims to describe — measured September 2026 it put
+BNB Chain at $97B against $147B at its 200M cap, and Aptos at $0.74B against
+$1.28B. So a chain with a published cap is priced on it, and the 29 with no cap
+at all — Ethereum, Solana, Monad, TON — fall back to total supply, which the
+line above the table states rather than hides.
+
+What moves is what you would expect: MegaETH goes from undervalued to richly
+valued, Pharos and Citrea from cheap to fair or worse, Monad stays deep value
+but loses 22 points of it. Chains already near full dilution — Kava, Flow,
+Tezos — rise, because everything around them got more expensive.
 
 ### Where the supply is going
 

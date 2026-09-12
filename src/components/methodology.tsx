@@ -167,11 +167,14 @@ export function MethodologyPanel({
             </h3>
             <ul className="text-ink-secondary mt-2 space-y-2 text-[12.5px] leading-relaxed">
               <li>
-                Market caps are circulating, not fully diluted. A chain with a
-                large unlock ahead will look cheaper here than it is. Where
-                DefiLlama publishes an unlock schedule — 40 of the 85 chains
-                here — the chain&rsquo;s own page breaks it down by date and
-                recipient. It is shown, never scored.
+                Market caps are circulating by default, so a chain with a large
+                unlock ahead looks cheaper here than it is. The basis control
+                above the table re-scores the whole screen on fully diluted
+                valuation — every ratio, the rank gap, the trend line and the
+                tier — which is the same model asked the other question rather
+                than a separate one. Where DefiLlama publishes an unlock
+                schedule — 40 of the 85 chains here — the chain&rsquo;s own page
+                breaks it down by date and recipient. None of it is scored.
               </li>
               <li>
                 Fees are what the chain itself earns, not what the apps on it

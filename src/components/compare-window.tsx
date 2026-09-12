@@ -15,7 +15,7 @@ import { Explain } from "~/components/ui/explain";
 import { ChainAvatar } from "~/components/ui/primitives";
 import { Segmented } from "~/components/ui/segmented";
 import { cn } from "~/lib/cn";
-import { compare, type CompareSide } from "~/lib/compare";
+import { capOf, compare, type CompareSide } from "~/lib/compare";
 import {
   formatMonth,
   formatMultiple,
@@ -74,7 +74,7 @@ const BASIS_OPTIONS = [
   {
     value: "fdv" as const,
     label: "Fully diluted",
-    hint: "Price × total supply, which is what CoinGecko's fully diluted value counts.",
+    hint: "Price × every token that will exist: maximum supply where a chain has one, total supply where it does not.",
   },
 ];
 
@@ -181,9 +181,14 @@ function CompareBody({
   }, [rows, storedA, storedB]);
 
   const result = useMemo(() => compare(a, b, basis), [a, b, basis]);
+  // Asked of `capOf`, not of `fdv`: the diluted valuation prefers maximum
+  // supply, so a chain with no CoinGecko `fdv` can still be priced and one
+  // with an `fdv` is what actually fails when neither supply is published.
   const missingFdv =
     basis === "fdv"
-      ? [a, b].filter((side) => side.fdv === null).map((side) => side.name)
+      ? [a, b]
+          .filter((side) => capOf(side, basis) === null)
+          .map((side) => side.name)
       : [];
 
   return (
@@ -231,9 +236,9 @@ function CompareBody({
 
           {missingFdv.length > 0 ? (
             <p className="text-ink-secondary mt-2 text-[12.5px] leading-relaxed">
-              CoinGecko publishes no total supply for {missingFdv.join(" or ")},
-              so a fully diluted comparison cannot be made. Switch to
-              circulating.
+              CoinGecko publishes neither a maximum nor a total supply for{" "}
+              {missingFdv.join(" or ")}, so a fully diluted comparison cannot be
+              made. Switch to circulating.
             </p>
           ) : (
             <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -316,10 +321,11 @@ function CompareBody({
         {/* what these numbers are, and are not */}
         <div className="border-hairline space-y-2 border-t pt-4">
           <p className="text-ink-faint text-[11px] leading-relaxed">
-            Prices and circulating market caps come from DefiLlama; supply,
-            fully diluted value and all-time highs from CoinGecko. Circulating
-            is price × circulating supply; fully diluted is price × total
-            supply, not a hard cap.
+            Prices and circulating market caps come from DefiLlama; supply and
+            all-time highs from CoinGecko. Circulating is price × the tokens in
+            circulation today. Fully diluted is price × every token that will
+            exist: maximum supply where a chain publishes one, total supply
+            where it does not.
           </p>
           <p className="text-ink-faint text-[11px] leading-relaxed">
             All-time-high market caps use today&rsquo;s supply, not the supply

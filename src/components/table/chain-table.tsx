@@ -26,6 +26,7 @@ import {
   formatUsd,
 } from "~/lib/format";
 import { divergingHue } from "~/lib/palette";
+import { capLabel, capShort, type CapBasis } from "~/lib/valuation-basis";
 import type { ChainSnapshot } from "~/server/domain/types";
 
 /**
@@ -83,6 +84,9 @@ export function ChainTable({
   // rest of the table's configuration.
   const storedSort = useFiltersStore((state) => state.sort);
   const setSort = useFiltersStore((state) => state.setSort);
+  // The rows arrive already re-scored; the headers have to say so, or the
+  // column reads as a market cap that has silently quadrupled.
+  const basis = useFiltersStore((state) => state.basis);
 
   const columns = useMemo<Column[]>(
     () => [
@@ -138,7 +142,7 @@ export function ChainTable({
       },
       {
         key: "marketCap",
-        label: "Market cap",
+        label: capLabel(basis),
         align: "right",
         width: 104,
         value: (chain) => chain.metrics.marketCap,
@@ -209,7 +213,7 @@ export function ChainTable({
       },
       {
         key: "mcapToFees",
-        label: "MC / fees",
+        label: `${capShort(basis)} / fees`,
         term: "mcapToFees",
         align: "right",
         width: 124,
@@ -324,7 +328,8 @@ export function ChainTable({
         ),
       },
     ],
-    [],
+    // The headers name the numerator, which the basis changes.
+    [basis],
   );
 
   const tableWidth =
@@ -376,6 +381,7 @@ export function ChainTable({
         columns={columns}
         sort={sort}
         setSort={setSort}
+        basis={basis}
       />
 
       <div className="scroll-slim hidden overflow-x-auto md:block">
@@ -548,11 +554,13 @@ function MobileList({
   columns,
   sort,
   setSort,
+  basis,
 }: {
   rows: readonly ChainSnapshot[];
   columns: readonly Column[];
   sort: TableSort;
   setSort: (next: TableSort | ((current: TableSort) => TableSort)) => void;
+  basis: CapBasis;
 }) {
   // Eighty-five cards at once made a 15,000px page. The first twenty are the
   // ones a sort was chosen for; the rest are a tap away, and a new sort or
@@ -672,7 +680,7 @@ function MobileList({
                     value={scoreText(chain.scores.cheapness)}
                   />
                   <MobileStat
-                    label="Market cap"
+                    label={capLabel(basis)}
                     value={formatUsd(chain.metrics.marketCap)}
                   />
                   <MobileStat

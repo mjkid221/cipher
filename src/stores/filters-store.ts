@@ -9,9 +9,11 @@ import {
   type Filters,
   type LayerFilter,
 } from "~/components/filters";
+import type { CapBasis } from "~/lib/valuation-basis";
 
 /**
- * The table's configuration — filters and sort — kept across refreshes.
+ * The screen's configuration — filters, sort and valuation basis — kept across
+ * refreshes.
  *
  * A zustand store with the `persist` middleware, in localStorage under
  * `par.filters`. Two decisions worth stating:
@@ -42,11 +44,25 @@ export interface TableSort {
 
 export const DEFAULT_SORT: TableSort = { key: "mispricing", direction: "desc" };
 
+/**
+ * Circulating is the default and stays the default.
+ *
+ * It is the basis the model ships with and the one every published figure on
+ * the chain pages uses, so a reader who has never touched the toggle should see
+ * the same numbers the methodology describes.
+ */
+export const DEFAULT_BASIS: CapBasis = "circulating";
+
+const BASES: readonly CapBasis[] = ["circulating", "diluted"];
+
 interface FiltersState {
   filters: Filters;
   sort: TableSort;
+  /** Which supply the whole screen prices chains on. */
+  basis: CapBasis;
   setFilters: (next: Filters) => void;
   setSort: (next: TableSort | ((current: TableSort) => TableSort)) => void;
+  setBasis: (next: CapBasis) => void;
   reset: () => void;
 }
 
@@ -83,24 +99,40 @@ function sanitiseSort(candidate: unknown): TableSort {
   };
 }
 
+function sanitiseBasis(candidate: unknown): CapBasis {
+  return BASES.includes(candidate as CapBasis)
+    ? (candidate as CapBasis)
+    : DEFAULT_BASIS;
+}
+
 export const useFiltersStore = create<FiltersState>()(
   persist(
     (set) => ({
       filters: DEFAULT_FILTERS,
       sort: DEFAULT_SORT,
+      basis: DEFAULT_BASIS,
       setFilters: (next) => set({ filters: next }),
       setSort: (next) =>
         set((state) => ({
           sort: typeof next === "function" ? next(state.sort) : next,
         })),
-      reset: () => set({ filters: DEFAULT_FILTERS, sort: DEFAULT_SORT }),
+      setBasis: (next) => set({ basis: next }),
+      reset: () =>
+        set({
+          filters: DEFAULT_FILTERS,
+          sort: DEFAULT_SORT,
+          basis: DEFAULT_BASIS,
+        }),
     }),
     {
       name: "par.filters",
       // v2: "Has native token" defaults off, so token-less chains show with
       // their badge. Saved v1 filters had it on for everyone who had touched
       // any filter, which would have kept the new default from ever applying.
-      version: 2,
+      // v3: adds the valuation basis. `sanitiseBasis` already falls back to
+      // circulating for a payload that has no `basis`, so the bump exists to
+      // make the shape change explicit rather than to rewrite anything.
+      version: 3,
       migrate: (persisted, version) => {
         const saved = (persisted ?? {}) as {
           filters?: Record<string, unknown>;
@@ -118,14 +150,16 @@ export const useFiltersStore = create<FiltersState>()(
       partialize: (state) => ({
         filters: { ...state.filters, query: "" },
         sort: state.sort,
+        basis: state.basis,
       }),
       merge: (persisted, current) => {
         const saved = persisted as
-          { filters?: unknown; sort?: unknown } | undefined;
+          { filters?: unknown; sort?: unknown; basis?: unknown } | undefined;
         return {
           ...current,
           filters: sanitise(saved?.filters),
           sort: sanitiseSort(saved?.sort),
+          basis: sanitiseBasis(saved?.basis),
         };
       },
     },
