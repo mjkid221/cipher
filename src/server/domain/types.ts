@@ -1,5 +1,7 @@
 /** Canonical shapes shared by the server model and the UI. */
 
+import type { NewsCategory } from "./news-classify";
+
 export interface ChainIdentity {
   /** URL-safe canonical id, e.g. `op-mainnet`. */
   slug: string;
@@ -316,6 +318,12 @@ export interface NewsFeed {
     sourceDomain: string | null;
     publishedAt: string | null;
     chains: string[];
+    /**
+     * What kind of news this is, where the headline says so plainly, or null
+     * where it does not. About a quarter carry one; see
+     * `domain/news-classify.ts` for why the rest are left alone.
+     */
+    category: NewsCategory | null;
   }[];
   /** How much each chain was written about in the window. */
   coverage: { chain: string; found: number; shown: number }[];

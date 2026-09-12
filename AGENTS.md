@@ -140,6 +140,22 @@ src/stores/              zustand filters store (persisted; version-bump + migrat
   remainder. `categories` keys differ from the series labels by case and carry
   a `" (TBD)"` suffix; the series are cumulative but **not monotonic**
   (Ethereum's staking tranche falls, netting EIP-1559 burns).
+- News: Google News RSS gives a title and nothing else — no body, no image, and
+  its links are redirects. There is no keyless sentiment API either (CryptoPanic
+  403s without a key, its v2 endpoint 404s; CoinGecko news is Pro-only), so
+  `domain/news-classify.ts` is a local pattern match on the headline. It names
+  the **event**, never a bullish/bearish direction: the direction version was
+  measured at ~57% on bearish calls, and its failures ("no user funds lost" read
+  as bullish) were confident. Keep every pattern word-bounded, never flip on
+  negation — refuse instead — and leave anything with a contrast word unlabelled.
+  About 24% of headlines get a badge; positives outrun negatives 2:1 because the
+  press does.
+- A Google News search for a chain mostly returns other people's news when the
+  chain is named after an English word: of 1,989 headline-chain pairs, 488 never
+  named the chain (Abstract 45/46, BOB 30/39, Provenance 17/19). `news.ts` keeps
+  only titles that name the chain via `NEWS_ALIASES`; ten chains legitimately go
+  to zero. Match on word boundaries — `near` otherwise hits "climbs near $65,000"
+  and `ton` hits "Washington".
 - Social metrics: X's API is paid, `syndication.twitter.com` answers 429 on the
   first request, CoinGecko's free `community_data` is null and keyless GitHub
   allows 60 requests an hour. CoinPaprika `/v1/coins/{id}` carries follower,
